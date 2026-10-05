@@ -24,7 +24,8 @@ secrets/
 !ops/compose/.env.template
 
 # 媒体与模型（大文件，不入 git）
-media/
+# 🔴 必须锚定到仓库根：裸 `media/` 会连带忽略源码目录 apps/api/src/modules/media/
+/media/
 models/
 dictionary/*.db
 dictionary/*.sqlite
