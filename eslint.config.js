@@ -6,14 +6,15 @@
  * 这是对文档 §1.2 示例的偏离，理由见 CONTRIBUTING.md 偏离登记 D-01。
  */
 import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
+import tsParser from '@typescript-eslint/parser';
+import tsPlugin from '@typescript-eslint/eslint-plugin';
 import importPlugin from 'eslint-plugin-import';
 import reactPlugin from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import prettierConfig from 'eslint-config-prettier';
 
-export default tseslint.config(
+export default [
   {
     ignores: [
       '**/node_modules/**',
@@ -27,12 +28,12 @@ export default tseslint.config(
   },
 
   js.configs.recommended,
-  ...tseslint.configs.recommended,
 
   // ── 基础 TS 规则 ──────────────────────────────────────────
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
+      parser: tsParser,
       parserOptions: {
         ecmaVersion: 2023,
         sourceType: 'module',
@@ -44,7 +45,7 @@ export default tseslint.config(
       },
     },
     plugins: {
-      '@typescript-eslint': tseslint.plugin,
+      '@typescript-eslint': tsPlugin,
       import: importPlugin,
     },
     settings: {
@@ -57,6 +58,8 @@ export default tseslint.config(
       react: { version: 'detect' },
     },
     rules: {
+      ...tsPlugin.configs.recommended.rules,
+
       // 禁止 any（CONTRIBUTING.md §3）
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
@@ -134,4 +137,4 @@ export default tseslint.config(
 
   // ── 必须放在最后：关闭与 Prettier 冲突的规则 ──────────────
   prettierConfig,
-);
+];

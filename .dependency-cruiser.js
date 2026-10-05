@@ -98,7 +98,18 @@ export default {
       },
     },
 
-    // ── 规则 8：禁止依赖未声明的隐式模块 ───────────────────────
+    // ── 规则 8：模块层禁止直连 drizzle-orm（profile-scope-chokepoint）──
+    {
+      name: 'profile-scope-chokepoint',
+      severity: 'error',
+      comment:
+        '🔴 所有 src/modules/** 下的文件禁止直接 import drizzle-orm，' +
+        '算子一律从 infra/db/query.ts 取用（ADR-0004 第三层防线）',
+      from: { path: '^apps/api/src/modules/' },
+      to: { path: 'drizzle-orm' },
+    },
+
+    // ── 规则 9：禁止依赖未声明的隐式模块 ───────────────────────
     {
       name: 'no-orphans',
       severity: 'warn',
