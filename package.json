@@ -1,0 +1,40 @@
+{
+  "name": "english-forge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EnglishForge · 飞牛 NAS 私有化部署版全学段英语学习软件",
+  "license": "AGPL-3.0-or-later",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=9.15.0 <10"
+  },
+  "type": "module",
+  "scripts": {
+    "lint": "pnpm -r --no-bail lint",
+    "typecheck": "pnpm -r --no-bail typecheck",
+    "test": "pnpm -r --no-bail test",
+    "test:coverage": "pnpm -r --no-bail test:coverage",
+    "depcruise": "depcruise --config .dependency-cruiser.js",
+    "verify": "pnpm run depcruise && pnpm run typecheck && pnpm run lint && pnpm run test",
+    "check:version": "node ops/scripts/check-version-consistency.mjs",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md,yaml,yml}\"",
+    "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm -r --filter \"./apps/*\" --filter \"./packages/*\" build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-react": "^7.37.3",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

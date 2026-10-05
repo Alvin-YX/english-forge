@@ -1,0 +1,14 @@
+packages:
+  # ── apps（仅 JS/TS 应用加入 workspace）────────────────────────────
+  # 注意：apps/speech 与 apps/ai 是 Python 服务（FastAPI），
+  # 由 uv/venv 管理，不进 pnpm workspace。见 CONTRIBUTING.md §2。
+  - 'apps/web'
+  - 'apps/api'          # 含 worker 入口（同包不同 entry，见 03 文档 8.1）
+  # apps/nginx 仅为 Dockerfile + 配置文件，无 package.json
+
+  # ── packages（共享库）─────────────────────────────────────────
+  - 'packages/contracts'
+  - 'packages/db'
+  - 'packages/content'
+  - 'packages/ui'
+  - 'packages/speech-tts'

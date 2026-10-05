@@ -1,0 +1,41 @@
+node_modules/
+dist/
+build/
+coverage/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 生成物
+packages/contracts/src/generated/
+packages/db/migrations/
+*.tsbuildinfo
+docs/api/
+
+# 环境与密钥（硬性：禁止提交）
+.env
+.env.local
+*.pem
+*.key
+secrets/
+!ops/compose/.env.template
+
+# 媒体与模型（大文件，不入 git）
+media/
+models/
+dictionary/*.db
+dictionary/*.sqlite
+
+# 编辑器
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# 日志
+*.log
+npm-debug.log*
+pnpm-debug.log*

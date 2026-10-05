@@ -1,0 +1,44 @@
+{
+  "name": "@eng-forge/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "EnglishForge 主 API（NestJS 11）—— M2 基础层：auth / user / taxonomy / system / media",
+  "main": "./dist/main.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start:prod": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --no-error-on-unmatched-pattern .",
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage --passWithNoTests"
+  },
+  "dependencies": {
+    "@eng-forge/contracts": "workspace:*",
+    "@eng-forge/db": "workspace:*",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/swagger": "^11.0.0",
+    "argon2": "^0.41.1",
+    "helmet": "^8.1.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.0.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@vitest/coverage-v8": "^2.1.8",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
