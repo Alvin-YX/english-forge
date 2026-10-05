@@ -34,10 +34,25 @@ import { AuthInfraModule } from './infra/profile/auth-infra.module.js';
 import { JwtAuthGuard } from './infra/profile/jwt-auth.guard.js';
 import { ProfileGuard } from './infra/profile/profile.guard.js';
 import { RolesGuard } from './infra/profile/rbac.guard.js';
+import { AuthModule } from './modules/auth/auth.module.js';
+import { MediaModule } from './modules/media/media.module.js';
 import { SystemModule } from './modules/system/system.module.js';
+import { TaxonomyModule } from './modules/taxonomy/taxonomy.module.js';
+import { UserModule } from './modules/user/user.module.js';
 
 @Module({
-  imports: [ConfigModule, DbModule, StoresModule, AuthInfraModule, IdempotencyModule, SystemModule],
+  imports: [
+    ConfigModule,
+    DbModule,
+    StoresModule,
+    AuthInfraModule,
+    IdempotencyModule,
+    AuthModule,
+    MediaModule,
+    TaxonomyModule,
+    UserModule,
+    SystemModule,
+  ],
   providers: [
     // ── 全局守卫（顺序敏感）────────────────────────────────
     { provide: APP_GUARD, useClass: JwtAuthGuard },
