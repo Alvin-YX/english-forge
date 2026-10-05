@@ -40,3 +40,6 @@ dictionary/*.sqlite
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# NFS workarounds
+_tmp_*
