@@ -25,6 +25,8 @@ export const ErrorCode = {
   CREDENTIALS_INVALID: 1105,
   RBAC_DENIED: 1106,
   PROFILE_FORBIDDEN: 1107, // 跨 profile 访问（架构级隔离，03 文档 REQ-011）
+  USERNAME_TAKEN: 1108, // 注册时用户名已被占用
+  ACCOUNT_DISABLED: 1109, // 账号已被禁用
 
   // ── 2xxx 词库与教材 ──────────────────────────────────────
   STAGE_NOT_FOUND: 2001,
