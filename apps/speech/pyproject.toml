@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "english-forge-speech"
+version = "1.0.0"
+description = "EnglishForge speech service: shadow reading scoring, phoneme alignment and TTS."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = "AGPL-3.0-or-later"
+authors = [{ name = "EnglishForge Team" }]
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+    "pydantic>=2.0,<3.0",
+    "librosa>=0.10,<1.0",
+    "scipy>=1.12,<2.0",
+    "numpy>=1.26,<3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<9.0",
+    "ruff>=0.6,<1.0",
+    "mypy>=1.10,<2.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/speech"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = ["node_modules", "dist"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "N",   # pep8-naming
+    "RUF", # ruff-specific
+]
+# E501 由 line-length 统一约束；RUF001-003 会把中文标点误报为歧义字符，
+# 本项目文档与注释大量使用中文，故整体关闭。
+ignore = ["E501", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["speech"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI 的 Depends() 在默认参数位置调用是官方推荐写法，属误报。
+extend-immutable-calls = ["fastapi.Depends"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src", "tests"]
+mypy_path = "src"
+packages = ["speech"]
+explicit_package_bases = true
+
+# Protocol stubs used by fakes are structurally matched; tests stay untyped-friendly.
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
