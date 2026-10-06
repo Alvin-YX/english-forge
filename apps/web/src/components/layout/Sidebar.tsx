@@ -18,6 +18,7 @@ const practiceNav: NavItem[] = [
   { to: '/practice/word-card', label: '词卡', icon: '🃏' },
   { to: '/practice/spelling', label: '拼写', icon: '⌨️' },
   { to: '/practice/dictation', label: '听写', icon: '✍️' },
+  { to: '/practice/shadowing', label: '跟读', icon: '🎤' },
 ];
 
 const otherNav: NavItem[] = [
@@ -28,6 +29,13 @@ const otherNav: NavItem[] = [
   { to: '/achievements', label: '成就', icon: '🎖️' },
   { to: '/parent/dashboard', label: '家长后台', icon: '👪' },
   { to: '/profile', label: '我的', icon: '⚙️' },
+];
+
+const gamesNav: NavItem[] = [
+  { to: '/game/word-shooter', label: '单词射击', icon: '🎯' },
+  { to: '/game/spell-truck', label: '拼写卡车', icon: '🚛' },
+  { to: '/game/miner', label: '单词矿工', icon: '⛏️' },
+  { to: '/game/match4', label: '配对挑战', icon: '🃏' },
 ];
 
 function NavGroup({ items }: { items: NavItem[] }) {
@@ -76,6 +84,10 @@ export function Sidebar() {
         <div>
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">练习</p>
           <NavGroup items={practiceNav} />
+        </div>
+        <div>
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">游戏</p>
+          <NavGroup items={gamesNav} />
         </div>
         <div>
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">更多</p>

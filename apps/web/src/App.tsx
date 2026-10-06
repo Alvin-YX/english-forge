@@ -4,8 +4,13 @@ import { AppShell } from './components/layout/AppShell';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 
 import { AchievementsPage } from './pages/achievements/AchievementsPage';
+import { Match4Game } from './pages/games/Match4Game';
+import { MinerGame } from './pages/games/MinerGame';
+import { SpellTruckGame } from './pages/games/SpellTruckGame';
+import { WordShooterGame } from './pages/games/WordShooterGame';
 import { ConversationPage } from './pages/conversation/ConversationPage';
 import { DictationPractice } from './pages/learning/DictationPractice';
+import { ShadowingPractice } from './pages/learning/ShadowingPractice';
 import { GamificationPage } from './pages/gamification/GamificationPage';
 import { ReportPage } from './pages/report/ReportPage';
 import { SpellingPractice } from './pages/learning/SpellingPractice';
@@ -39,8 +44,13 @@ export default function App() {
         <Route path="/practice/word-card" element={<WordCardPractice />} />
         <Route path="/practice/spelling" element={<SpellingPractice />} />
         <Route path="/practice/dictation" element={<DictationPractice />} />
+        <Route path="/practice/shadowing" element={<ShadowingPractice />} />
         <Route path="/errorbook" element={<ErrorBookPage />} />
         <Route path="/gamification" element={<GamificationPage />} />
+        <Route path="/game/word-shooter" element={<WordShooterGame />} />
+        <Route path="/game/spell-truck" element={<SpellTruckGame />} />
+        <Route path="/game/miner" element={<MinerGame />} />
+        <Route path="/game/match4" element={<Match4Game />} />
         <Route path="/conversation" element={<ConversationPage />} />
         <Route path="/conversation/:conversationId" element={<ConversationPage />} />
         <Route path="/reports" element={<ReportPage />} />

@@ -6,9 +6,9 @@
   "description": "EnglishForge Web · 学习端 + 家长后台",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit -p tsconfig.app.json && vite build",
+    "build": "pnpm run typecheck && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.worker.json",
     "lint": "eslint src",
     "test": "vitest run"
   },
@@ -29,6 +29,7 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^5.4.8",
+    "vite-plugin-pwa": "^0.20.5",
     "vitest": "^2.1.8"
   }
 }

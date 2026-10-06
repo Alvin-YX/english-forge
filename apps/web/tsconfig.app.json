@@ -1,4 +1,6 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src"]
+  "include": ["src"],
+  "//": "service-worker.ts 由 tsconfig.worker.json 单独编译（WebWorker lib），必须从 DOM 应用编译中排除",
+  "exclude": ["src/service-worker.ts"]
 }

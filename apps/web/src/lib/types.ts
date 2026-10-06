@@ -148,6 +148,37 @@ export interface CsvExportView {
   rowCount: number;
 }
 
+// ── Speech scoring types ──
+export interface ShadowScoreResult {
+  accuracy: number;
+  fluency: number;
+  completeness: number;
+  prosody: number;
+  overall: number;
+  confidence: number;
+  confidence_level: 'high' | 'medium' | 'low';
+  grade: 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+  has_noise: boolean;
+  duration: number;
+  span_count: number;
+}
+
+export interface PhonemeSegment {
+  text: string;
+  accuracy: number;
+  start?: number;
+  end?: number;
+}
+
+export interface PracticeSessionResult {
+  wordId: number;
+  word: string;
+  score: number;
+  grade: string;
+  isCorrect: boolean;
+  durationMs: number;
+}
+
 // ── Common types ──
 export interface PaginatedResponse<T> {
   items: T[];

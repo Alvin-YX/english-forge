@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Service Worker 独立编译上下文：注入 Manifest 的产物由 vite-plugin-pwa
+    // 的 rollup 单独打包（rollupFormat: 'es'），不使用 DOM 类型。
+    // 这里必须用 WebWorker lib —— 若沿用 tsconfig.app.json 的 DOM lib，
+    // `self` 会被解析为 Window，导致 skipWaiting / clients / FetchEvent 全部报错。
+    "lib": ["ES2023", "WebWorker"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["src/service-worker.ts"]
+}

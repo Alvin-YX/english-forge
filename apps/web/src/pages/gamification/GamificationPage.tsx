@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { api } from '../../lib/api';
 import { Badge } from '../../components/ui/Badge';
@@ -14,10 +15,10 @@ import type {
 } from '../../lib/types';
 
 const GAME_CODE_OPTIONS = [
-  { value: 'word-match', label: '词卡配对' },
-  { value: 'spelling', label: '单词拼写' },
-  { value: 'dictation', label: '听写挑战' },
-  { value: 'quiz', label: '知识问答' },
+  { value: 'word_shooter', label: '单词射击', icon: '🎯', path: '/game/word-shooter' },
+  { value: 'spell_truck', label: '拼写卡车', icon: '🚛', path: '/game/spell-truck' },
+  { value: 'miner', label: '单词矿工', icon: '⛏️', path: '/game/miner' },
+  { value: 'match4', label: '配对挑战', icon: '🃏', path: '/game/match4' },
 ] as const;
 
 const BADGE_ICONS: Record<string, string> = {
@@ -52,6 +53,7 @@ function formatDateTime(iso: string) {
 }
 
 export function GamificationPage() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [badges, setBadges] = useState<BadgeView[]>([]);
   const [challenge, setChallenge] = useState<WeeklyChallengeView | null>(null);
@@ -135,6 +137,25 @@ export function GamificationPage() {
           accent="success"
         />
       </div>
+
+      <Card className="p-5">
+        <CardHeader title="开始游戏" subtitle="选择一款游戏开始挑战" />
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {GAME_CODE_OPTIONS.map((game) => (
+            <button
+              key={game.value}
+              onClick={() => navigate(game.path)}
+              className="group flex flex-col items-center gap-3 rounded-xl border-2 border-slate-200 bg-gradient-to-b from-white to-slate-50 p-6 transition-all hover:border-primary-300 hover:shadow-md"
+            >
+              <span className="text-4xl transition-transform group-hover:scale-110" aria-hidden>
+                {game.icon}
+              </span>
+              <span className="font-semibold text-slate-800">{game.label}</span>
+              <span className="text-xs text-primary-600 group-hover:underline">进入游戏 →</span>
+            </button>
+          ))}
+        </div>
+      </Card>
 
       <Card className="p-5">
         <CardHeader title="本周挑战" subtitle="完成目标可获得额外积分奖励" />
