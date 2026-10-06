@@ -1,0 +1,29 @@
+{
+  "_comment": "app/ui/config —— 走 fnOS 统一网关，不做端口直连。理由：跟读打分需 WebSocket（SSE/WebSocket 长连接），家长后台需按 NAS 账号做用户隔离。详见 ops/fnos/FPK-SPEC.md 第七节。",
+  ".url": {
+    "englishforge.main": {
+      "_comment": "键名必须与 manifest 的 desktop_applaunchname 严格一致",
+      "title": "EnglishForge",
+      "title_i18n": {
+        "zh": "英语学习工作台",
+        "en": "English Forge"
+      },
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/englishforge",
+      "gatewaySocket": "app.sock",
+      "url": "/app/englishforge",
+      "allUsers": true
+    }
+  },
+  "_notes": [
+    "gatewaySocket 只填文件名，socket 必须放在 target 目录下 → 宿主路径 /var/apps/englishforge/target/app.sock",
+    "protocol 与 port 在网关模式下被忽略",
+    "Docker 用法：把 ${TRIM_APPDEST} 挂进容器，让容器内 nginx 在该目录创建 unix socket",
+    "网关会先校验 NAS 登录态，再通过 Header 传身份：X-Trim-Userid / X-Trim-Isadmin / X-Trim-Username",
+    "🔴 不要信任客户端传入的用户 ID，只用网关转发的 Header",
+    "⚠️ gatewayPrefix 公开路径中不要用点号",
+    "⚠️ 图标必须是 PNG，不支持 SVG"
+  ]
+}

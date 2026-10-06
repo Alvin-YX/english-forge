@@ -1,0 +1,91 @@
+#!/bin/bash
+# cmd/install_callback —— 安装文件应用【后】执行
+#
+# 官方时机：安装文件应用后
+# 🔴 这是 docker load 的正确时机：此时 app/docker/images/*.tar.gz 已随包就位，
+#    且 fnOS 尚未尝试 compose up（我们没声明 docker-project）。
+#
+# 本脚本只做「镜像导入 + 目录准备」，不启动容器 —— 启动交给 cmd/main start。
+
+set -u
+
+APP_NAME="englishforge"
+DEPLOY_DIR="${TRIM_APPDEST}/docker"
+LOG_DIR="${TRIM_PKGVAR}/logs"
+LOG_FILE="${LOG_DIR}/install.log"
+ENV_FILE="${TRIM_PKGETC}/.env"
+ENV_TEMPLATE="${DEPLOY_DIR}/.env.template"
+
+log() {
+    mkdir -p "${LOG_DIR}" 2>/dev/null
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [install_callback] $1" >> "${LOG_FILE}"
+}
+
+fail() {
+    log "ERROR: $1"
+    if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then
+        echo "$1" > "${TRIM_TEMP_LOGFILE}"
+    fi
+    exit 1
+}
+
+log "=== 安装后回调开始 ==="
+
+# ── 1. 生成 .env（含随机凭据）──────────────────────────────
+if [ ! -f "${ENV_FILE}" ]; then
+    [ -f "${ENV_TEMPLATE}" ] || fail "缺少 .env 模板：${ENV_TEMPLATE}"
+    PG_PW=$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 24)
+    JWT_SECRET=$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | head -c 48)
+    MASTER_KEY=$(head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
+    sed -e "s/__POSTGRES_PASSWORD__/${PG_PW}/g" \
+        -e "s/__JWT_SECRET__/${JWT_SECRET}/g" \
+        -e "s/__APP_MASTER_KEY__/${MASTER_KEY}/g" \
+        "${ENV_TEMPLATE}" > "${ENV_FILE}" \
+        || fail "生成 .env 失败"
+    log "已生成 .env（含随机凭据）"
+else
+    log ".env 已存在，跳过生成（幂等）"
+fi
+
+# ── 2. 导入离线镜像（幂等）────────────────────────────────
+if [ -d "${DEPLOY_DIR}/images" ]; then
+    COUNT=0
+    for tarball in "${DEPLOY_DIR}/images/"*.tar.gz; do
+        [ -f "${tarball}" ] || continue
+        NAME=$(basename "${tarball}" .tar.gz)
+        TARGET=$(grep -oE "image:[[:space:]]*${NAME}:[0-9][^[:space:]]*" \
+                 "${DEPLOY_DIR}/docker-compose.yaml" 2>/dev/null | head -1 \
+                 | sed -E 's/.*image:[[:space:]]*//')
+        if [ -z "${TARGET}" ]; then
+            log "WARN: compose 中未找到 ${NAME} 的镜像定义，跳过"
+            continue
+        fi
+        if docker image inspect "${TARGET}" >/dev/null 2>&1; then
+            log "镜像已存在，跳过：${TARGET}"
+            continue
+        fi
+        log "导入镜像 ${TARGET}..."
+        if gunzip -c "${tarball}" | docker load; then
+            log "镜像导入成功：${TARGET}"
+            COUNT=$((COUNT + 1))
+        else
+            fail "镜像 ${NAME} 导入失败。若 NAS 网络受限，可在应用设置中改用在线拉取模式。"
+        fi
+    done
+    log "共导入 ${COUNT} 个镜像"
+else
+    log "未发现离线镜像目录，跳过导入（将使用在线拉取模式）"
+fi
+
+# ── 3. 准备数据目录 ───────────────────────────────────────
+for sub in db media exports content models logs; do
+    mkdir -p "${TRIM_PKGVAR}/${sub}" 2>/dev/null || log "WARN: 创建 ${sub} 目录失败"
+done
+log "数据目录准备完成"
+
+# ⚠️ 官方说明：Windows ACL 环境下 chmod 可能无效，失败不阻断
+chmod 700 "${TRIM_PKGVAR}/db" 2>/dev/null || log "WARN: chmod db 失败（Windows ACL 属正常）"
+chmod 600 "${ENV_FILE}" 2>/dev/null || log "WARN: chmod .env 失败（Windows ACL 属正常）"
+
+log "=== 安装后回调完成（容器将在应用启动时拉起）==="
+exit 0

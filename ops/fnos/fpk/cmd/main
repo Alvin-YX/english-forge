@@ -1,0 +1,205 @@
+#!/bin/bash
+# cmd/main —— EnglishForge 容器生命周期自控脚本
+#
+# 🔴 为什么不用 docker compose 默认托管：
+#    因采用「内置离线镜像」方案且**故意不声明 config/resource 的 docker-project**
+#    （声明了 fnOS 会在生命周期钩子之前就 compose up，此时镜像尚未导入 → No such image）。
+#    因此容器生命周期完全由本脚本掌控。
+#
+# 官方约定（https://developer.fnnas.com/docs/core-concepts/framework）：
+#   退出码 0 = 成功（status 中表示运行中）
+#   退出码 1 = 失败
+#   退出码 3 = 未运行（仅 status）
+#   其他    = exit 1
+#
+# 🔴 官方要求：脚本应尽量幂等 —— 安装/升级/配置流程可能被重复执行。
+
+set -u
+
+APP_NAME="englishforge"
+DEPLOY_DIR="${TRIM_APPDEST}/docker"
+PROJECT="englishforge"
+COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yaml"
+DATA_DIR="${TRIM_PKGVAR}"
+LOG_DIR="${TRIM_PKGVAR}/logs"
+LOG_FILE="${LOG_DIR}/app.log"
+SHARE_ROOT="${TRIM_PKGVAR}/share"
+
+# 🔴 socket 权限 0600，探活必须用 package 用户身份读取，否则健康应用会被误判失败
+RUN_UID="${TRIM_RUN_UID:-${TRIM_UID}}"
+SOCKET_PATH="${TRIM_APPDEST}/app.sock"
+
+log() {
+    mkdir -p "${LOG_DIR}" 2>/dev/null
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [main] $1" >> "${LOG_FILE}"
+}
+
+fail() {
+    # 🔴 官方：失败前把清晰信息写入 TRIM_TEMP_LOGFILE，这些会展示给用户
+    local msg="$1"
+    log "ERROR: ${msg}"
+    if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then
+        echo "${msg}" > "${TRIM_TEMP_LOGFILE}"
+    fi
+    exit 1
+}
+
+# ── 镜像导入（幂等：已存在则跳过）──────────────────────────
+# 指纹比对：docker image inspect 成功即认为已导入
+load_image() {
+    local name="$1"
+    local tarball="${DEPLOY_DIR}/images/${name}.tar.gz"
+    local target
+
+    # 从 .env 或 compose 中解析该服务对应的镜像 tag
+    target=$(grep -oE "^[[:space:]]*image:[[:space:]]*${name}:[0-9][^[:space:]]*" \
+             "${COMPOSE_FILE}" 2>/dev/null | head -1 | sed -E 's/.*image:[[:space:]]*//')
+    if [ -z "${target}" ]; then
+        log "WARN: compose 中未找到 ${name} 的镜像定义，跳过"
+        return 0
+    fi
+
+    # 幂等：镜像已存在
+    if docker image inspect "${target}" >/dev/null 2>&1; then
+        log "镜像已存在，跳过导入：${target}"
+        return 0
+    fi
+
+    [ -f "${tarball}" ] || fail "缺少镜像包 ${name}.tar.gz（期望路径 ${tarball}）"
+
+    log "导入镜像 ${target}（约需 1-3 分钟）..."
+    gunzip -c "${tarball}" | docker load || fail "镜像 ${name} 导入失败"
+
+    docker image inspect "${target}" >/dev/null 2>&1 \
+        || fail "镜像 ${target} 导入后仍不可用"
+    return 0
+}
+
+load_all_images() {
+    [ -d "${DEPLOY_DIR}/images" ] || return 0
+    for tarball in "${DEPLOY_DIR}/images/"*.tar.gz; do
+        [ -f "${tarball}" ] || continue
+        local name
+        name=$(basename "${tarball}" .tar.gz)
+        load_image "${name}" || return 1
+    done
+    return 0
+}
+
+compose() {
+    docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" "$@"
+}
+
+# ── 状态判定 ───────────────────────────────────────────────
+# 判据：web 容器在运行 且 统一网关 socket 存在
+# 两者缺一不可 —— 只有容器跑起来但 socket 没建，说明 nginx 未正确挂载 TRIM_APPDEST
+is_running() {
+    local container_state
+    container_state=$(docker inspect -f '{{.State.Running}}' "${APP_NAME}-web-1" 2>/dev/null)
+    [ "${container_state}" = "true" ] || return 1
+    [ -S "${SOCKET_PATH}" ] || return 1
+    return 0
+}
+
+wait_healthy() {
+    local max_wait=$1
+    local waited=0
+    log "等待服务就绪（最长 ${max_wait}s）..."
+    while [ "${waited}" -lt "${max_wait}" ]; do
+        if is_running; then
+            # 容器起来了，还要等 speech 首次加载模型（healthcheck start_period=180s）
+            if compose exec -T web wget -q -O /dev/null http://api:3000/api/v1/healthz 2>/dev/null; then
+                log "服务已就绪（${waited}s）"
+                return 0
+            fi
+        fi
+        sleep 3
+        waited=$((waited + 3))
+    done
+    return 1
+}
+
+# ── 环境准备 ───────────────────────────────────────────────
+prepare_dirs() {
+    mkdir -p "${DATA_DIR}" "${LOG_DIR}" 2>/dev/null || return 1
+    # 官方说明：这些目录用 Windows ACL 权限模型，不是 POSIX ACL，chmod 可能无效。
+    # 因此只在确有必要时尝试，且失败不阻断（记录日志即可）。
+    chmod 700 "${DATA_DIR}/db" 2>/dev/null && log "已设置 db 目录权限 700" \
+        || log "WARN: chmod db 目录失败（Windows ACL 环境下属正常）"
+    chmod 600 "${TRIM_PKGETC}/.env" 2>/dev/null && log "已设置 .env 权限 600" \
+        || log "WARN: chmod .env 失败（Windows ACL 环境下属正常）"
+    return 0
+}
+
+ensure_env() {
+    local env_file="${TRIM_PKGETC}/.env"
+    if [ -f "${env_file}" ]; then
+        return 0
+    fi
+    local template="${DEPLOY_DIR}/.env.template"
+    [ -f "${template}" ] || fail "缺少 .env 模板：${template}"
+    # 生成随机凭据（POSTGRES_PASSWORD / JWT_SECRET / APP_MASTER_KEY）
+    local pg_pw jwt_secret master_key
+    pg_pw=$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 24)
+    jwt_secret=$(head -c 48 /dev/urandom | base64 | tr -d '/+=' | head -c 48)
+    master_key=$(head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
+
+    sed -e "s/__POSTGRES_PASSWORD__/${pg_pw}/g" \
+        -e "s/__JWT_SECRET__/${jwt_secret}/g" \
+        -e "s/__APP_MASTER_KEY__/${master_key}/g" \
+        "${template}" > "${env_file}" \
+        || fail "生成 .env 失败"
+    log "已生成 .env（含随机凭据）"
+    return 0
+}
+
+# ═══════════════════════════════════════════════════════════
+# 入口
+# ═══════════════════════════════════════════════════════════
+case "${1:-}" in
+    start)
+        log "=== 启动 ${APP_NAME} ==="
+        [ -f "${COMPOSE_FILE}" ] || fail "缺少 compose 文件：${COMPOSE_FILE}"
+        prepare_dirs
+        ensure_env
+        load_all_images || fail "镜像导入失败"
+        cd "${DEPLOY_DIR}" || fail "无法进入部署目录 ${DEPLOY_DIR}"
+        compose up -d --remove-orphans || fail "容器启动失败，详见 ${LOG_FILE}"
+        if wait_healthy 300; then
+            log "启动完成"
+            exit 0
+        fi
+        # 超时不阻断（模型可能仍在下载），但要明确告知
+        log "WARN: 300s 内未完全就绪（首次启动需下载语音模型，约需 10-20 分钟）"
+        log "可用 fnOS 应用页查看状态，或查看 ${LOG_FILE}"
+        exit 0
+        ;;
+
+    stop)
+        log "=== 停止 ${APP_NAME} ==="
+        [ -f "${COMPOSE_FILE}" ] || exit 0
+        cd "${DEPLOY_DIR}" || exit 0
+        compose down --remove-orphans 2>/dev/null || log "WARN: compose down 返回非零"
+        log "已停止"
+        exit 0
+        ;;
+
+    status)
+        if is_running; then
+            exit 0
+        fi
+        exit 3
+        ;;
+
+    restart)
+        log "=== 重启 ${APP_NAME} ==="
+        "$0" stop
+        "$0" start
+        exit $?
+        ;;
+
+    *)
+        echo "用法: $0 {start|stop|status|restart}" >&2
+        exit 1
+        ;;
+esac

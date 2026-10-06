@@ -1,0 +1,35 @@
+#!/bin/bash
+# cmd/config_callback —— 配置变更应用【后】执行
+# 官方时机：配置变更应用后。用于应用 .env 变更并重启。
+
+set -u
+
+LOG_FILE="${TRIM_PKGVAR}/logs/config.log"
+DEPLOY_DIR="${TRIM_APPDEST}/docker"
+ENV_FILE="${TRIM_PKGETC}/.env"
+ENV_TEMPLATE="${DEPLOY_DIR}/.env.template"
+
+log() {
+    mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [config_callback] $1" >> "${LOG_FILE}"
+}
+
+log "=== 配置变更后 ==="
+
+# 校验 .env 完整性（缺必填项则报错，避免容器起不来）
+MISSING=""
+for key in POSTGRES_PASSWORD JWT_SECRET APP_MASTER_KEY; do
+    grep -q "^${key}=" "${ENV_FILE}" 2>/dev/null || MISSING="${MISSING} ${key}"
+done
+
+if [ -n "${MISSING}" ]; then
+    MSG="配置缺少必填项：${MISSING}。请在应用设置中重新填写。"
+    log "ERROR: ${MSG}"
+    if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then
+        echo "${MSG}" > "${TRIM_TEMP_LOGFILE}"
+    fi
+    exit 1
+fi
+
+log "配置校验通过，应用配置将在下次启动时生效"
+exit 0

@@ -1,0 +1,28 @@
+{
+  "_comment": "config/resource —— 🔴 关键决策：故意【不】声明 docker-project。官方/社区一致表明：声明了 docker-project，fnOS 会在生命周期钩子之前就执行 compose up，此时离线镜像尚未导入，直接报 No such image 安装失败。容器生命周期改由 cmd/main 自行掌控（docker load + compose up/down）。详见 ops/fnos/FPK-SPEC.md 第二节。",
+  "data-share": {
+    "shares": [
+      {
+        "_comment": "媒体目录：录音（.webm 存档）、TTS 缓存（mp3）",
+        "name": "englishforge/media"
+      },
+      {
+        "_comment": "周报导出：PNG 长图、CSV（UTF-8 with BOM）",
+        "name": "englishforge/exports"
+      },
+      {
+        "_comment": "词库与教材数据（用户自行导入的词表放这里，不分发教材原文）",
+        "name": "englishforge/content"
+      },
+      {
+        "_comment": "数据库数据卷（PostgreSQL 或 SQLite）",
+        "name": "englishforge/db"
+      },
+      {
+        "_comment": "语音模型卷（约 250MB~1GB，ro 挂载，权重不入 fpk）",
+        "name": "englishforge/models"
+      }
+    ]
+  },
+  "_note": "官方说明：这些目录用 Windows ACL 权限模型，不是 POSIX ACL，脚本里 chmod 可能无效。应用通过 TRIM_DATA_SHARE_PATHS（: 分隔）或 /var/apps/englishforge/share/{name} 软链读取。"
+}

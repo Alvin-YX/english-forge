@@ -1,0 +1,39 @@
+#!/bin/bash
+# cmd/uninstall_init —— 卸载【前】执行
+# 官方时机：卸载前。用于确认是否保留数据。
+
+set -u
+
+LOG_DIR="${TRIM_PKGVAR}/logs"
+LOG_FILE="${LOG_DIR}/uninstall.log"
+KEEP_DIR="${TRIM_PKGVAR}/share"
+
+mkdir -p "${LOG_DIR}" 2>/dev/null
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [uninstall_init] $1" >> "${LOG_FILE}"
+}
+
+log "=== 卸载前检查 ==="
+
+# 🔴 数据安全：学习数据（录音、错题、进度）是用户的，不可静默删除
+if [ -d "${TRIM_PKGVAR}" ]; then
+    SIZE=$(du -sh "${TRIM_PKGVAR}" 2>/dev/null | awk '{print $1}')
+    log "数据目录占用：${SIZE:-未知}"
+    log "卸载时【保留】全部学习数据（录音、错题、学习进度、词库导入）"
+    log "如需彻底清除，请在卸载后手动删除：${TRIM_PKGVAR}"
+fi
+
+# 导出最后一次备份，避免误删后无法恢复
+if [ -d "${TRIM_PKGVAR}/db" ]; then
+    STAMP=$(date '+%Y%m%d-%H%M%S')
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "englishforge-db-1"; then
+        if docker exec englishforge-db-1 pg_dump -U englishforge englishforge 2>/dev/null \
+            | gzip > "${TRIM_PKGVAR}/final-backup-${STAMP}.sql.gz"; then
+            log "卸载前已导出最终备份：final-backup-${STAMP}.sql.gz"
+        fi
+    fi
+fi
+
+log "=== 卸载前检查完成 ==="
+exit 0

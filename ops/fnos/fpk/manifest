@@ -1,0 +1,83 @@
+; EnglishForge · fnOS 应用元数据
+;
+; 🔴 依据官方文档 https://developer.fnnas.com/docs/core-concepts/manifest
+;    详细说明见 ops/fnos/FPK-SPEC.md
+;
+; ⚠️ 格式：INI 风格 key=value，**不带引号**（与官方 Docker/Native 案例一致）
+
+[appname]
+
+; ==== 唯一标识，会成为 /var/apps/{appname} ====
+; ⚠️ 只用小写字母、数字、连字符。**fnOS 不接受下划线**（我方旧文档写 english_forge 是错的）
+appname = englishforge
+
+; ==== 版本号 ====
+; ⚠️ 官方定义「x[.y[.z]][-build]」，**不强制三段式**。
+;    我方旧文档「强制 X.Y.Z 且必须与镜像 tag 严格对齐，否则报 manifest unknown」是错的：
+;    manifest unknown 是 Docker registry 的 tag 查找错误，fnOS 从不校验两者关系。
+;    这里仍用三段式是为了与 npm package.json 保持单一版本源，但不做强校验依赖。
+version = 1.0.0
+
+; ==== 展示名 ====
+display_name = 英语学习工作台
+display_name_en = English Forge
+
+; ==== 描述（必填，支持 HTML）====
+desc = 覆盖小学到大学全学段的英语课程与音素级口语评测。语音识别、发音评分、文本转语音全部在 NAS 本地完成，默认零外网。包含 32 册教材词库、5 词循环微学习、FSRS 间隔重复、错题本、家长周报。
+
+; ==== 维护者与分发者（fnpack 强制必填）====
+maintainer = EnglishForge Team
+maintainer_url = https://github.com/your-org/english-forge
+distributor = your-org
+distributor_url = https://github.com/your-org/english-forge
+
+; ==== 来源 ====
+; ⚠️ 官方只举例 thirdparty 一个值，其他合法值未找到权威来源
+source = thirdparty
+
+; ==== 平台 ====
+; x86 / arm / all 三选一。
+; 本项目 compose 内无架构相关二进制（模型在卷里外挂），故可用 all，
+; 但镜像仍须多架构（speech 除外，仅 amd64，因模型 1GB+ 且 arm64 需自编译 torch）
+platform = all
+
+; ==== 最低 fnOS 版本 ====
+; 🔴 1.1.3100 是硬要求：统一网关（gatewayPrefix）功能需要该版本以上
+os_min_version = 1.1.3100
+
+; ==== 桌面入口 ====
+; 声明后 app/{desktop_uidir}/ 必须存在
+desktop_uidir = ui
+; 必须与 app/ui/config 中的 .url 键名一致
+desktop_applaunchname = englishforge.main
+
+; ==== 服务端口 ====
+; 官方说明「目前只支持单个端口」
+service_port = 8443
+
+; ==== 启动前检查端口占用 ====
+; 端口固定，故保持 true
+checkport = true
+
+; ==== 是否显示启停与状态控件 ====
+; 我们要显示 → true
+ctl_stop = true
+
+; ==== 安装类型 ====
+; 🔴 留空 = 安装时由用户选择存储空间（fnOS 官方行为）
+;    填 root = 装到系统分区（我们不要）
+install_type =
+
+; ==== 依赖的其他 fnOS 应用 ====
+; 🔴 语法：`:` 分隔，从右到左安装，`>` 声明最低版本
+; Docker 运行环境由 fnOS 内置，无需声明
+install_dep_apps =
+
+; ==== 授权目录配置 ====
+; ⚠️ 不要设 disable_authorization_path=true
+;    EnglishForge 需要读媒体目录与词库目录
+disable_authorization_path = false
+
+; ==== 更新日志 ====
+; ⚠️ 官方两处文档不一致：更新日志页写 change_log，Manifest 页写 changelog
+;    **两个都不依赖**，等官方确认后再补

@@ -1,0 +1,38 @@
+#!/bin/bash
+# cmd/install_init —— 安装文件应用【前】执行
+#
+# 官方时机：安装文件应用前
+# 🔴 此阶段 TRIM_APPDEST 下的 app/ 目录可能尚未就绪，
+#    所以只做不依赖应用文件的准备工作（建目录、写 .env）。
+
+set -u
+
+DATA_DIR="${TRIM_PKGVAR}"
+LOG_DIR="${DATA_DIR}/logs"
+LOG_FILE="${LOG_DIR}/install.log"
+
+mkdir -p "${DATA_DIR}" "${LOG_DIR}" 2>/dev/null
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [install_init] $1" >> "${LOG_FILE}"
+}
+
+log "开始安装前准备"
+log "数据目录：${DATA_DIR}"
+log "运行用户：${TRIM_RUN_USERNAME:-unknown} (uid=${TRIM_UID:-unknown})"
+
+# 存储池剩余空间检查：语音模型约 2.5GB + 录音与 TTS 缓存
+AVAIL_GB=$(df -BG "${DATA_DIR}" 2>/dev/null | awk 'NR==2 {gsub(/G/,"",$4); print $4}')
+REQUIRED_GB=25
+if [ -n "${AVAIL_GB:-}" ] && [ "${AVAIL_GB}" -lt "${REQUIRED_GB}" ]; then
+    MSG="存储空间不足：需要至少 ${REQUIRED_GB}GB（语音模型 + 录音 + TTS 缓存），当前可用 ${AVAIL_GB}GB"
+    log "ERROR: ${MSG}"
+    if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then
+        echo "${MSG}" > "${TRIM_TEMP_LOGFILE}"
+    fi
+    exit 1
+fi
+log "存储空间检查通过（可用 ${AVAIL_GB:-未知}GB）"
+
+log "安装前准备完成"
+exit 0

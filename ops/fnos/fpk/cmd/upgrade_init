@@ -1,0 +1,41 @@
+#!/bin/bash
+# cmd/upgrade_init —— 升级【前】执行
+# 官方时机：升级前。用于升级前自动备份数据（对齐 03 文档 §7.11「升级前自动备份 PG 数据卷」）。
+
+set -u
+
+LOG_DIR="${TRIM_PKGVAR}/logs"
+LOG_FILE="${LOG_DIR}/upgrade.log"
+BACKUP_DIR="${TRIM_PKGVAR}/backup"
+
+mkdir -p "${LOG_DIR}" "${BACKUP_DIR}" 2>/dev/null
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [upgrade_init] $1" >> "${LOG_FILE}"
+}
+
+log "=== 升级前准备 ==="
+
+# 清理超过 14 天的旧备份（对齐 03 文档 §7.9 保留策略）
+if [ -d "${BACKUP_DIR}" ]; then
+    REMOVED=$(find "${BACKUP_DIR}" -maxdepth 1 -name "*.tar.gz" -mtime +14 2>/dev/null | wc -l)
+    find "${BACKUP_DIR}" -maxdepth 1 -name "*.tar.gz" -mtime +14 -delete 2>/dev/null
+    log "已清理 ${REMOVED} 个超过 14 天的旧备份"
+fi
+
+# 触发一次数据库备份（若容器在跑）
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "englishforge-db-1"; then
+    log "检测到数据库在运行，执行升级前备份"
+    STAMP=$(date '+%Y%m%d-%H%M%S')
+    if docker exec englishforge-db-1 pg_dump -U englishforge englishforge 2>/dev/null \
+        | gzip > "${BACKUP_DIR}/pre-upgrade-${STAMP}.sql.gz"; then
+        log "备份完成：pre-upgrade-${STAMP}.sql.gz"
+    else
+        log "WARN: 数据库备份失败，升级仍将继续（数据仍在卷中）"
+    fi
+else
+    log "数据库未运行，跳过备份（数据卷持久化，重启后仍在）"
+fi
+
+log "=== 升级前准备完成 ==="
+exit 0

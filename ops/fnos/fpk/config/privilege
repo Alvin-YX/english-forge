@@ -1,0 +1,8 @@
+{
+  "_comment": "config/privilege —— 官方格式是 JSON，不是我方旧文档的 bash。详见 ops/fnos/FPK-SPEC.md 第五节。uid/gid 由 fnOS 分配，通过 TRIM_UID / TRIM_GID 环境变量读取，禁止硬编码。",
+  "privileges": {
+    "defaults": {
+      "run-as": "package"
+    }
+  }
+}

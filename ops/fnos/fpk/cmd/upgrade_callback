@@ -1,0 +1,33 @@
+#!/bin/bash
+# cmd/upgrade_callback —— 升级【后】执行
+# 官方时机：升级后。用于清理孤立容器与失效镜像。
+
+set -u
+
+LOG_DIR="${TRIM_PKGVAR}/logs"
+LOG_FILE="${LOG_DIR}/upgrade.log"
+
+mkdir -p "${LOG_DIR}" 2>/dev/null
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [upgrade_callback] $1" >> "${LOG_FILE}"
+}
+
+log "=== 升级后清理 ==="
+
+# 清理旧版本遗留的孤立容器与悬空镜像（对齐 03 文档 §9.1「定期 docker image prune」）
+ORPHANS=$(docker ps -a --filter "name=englishforge" --format '{{.Names}}' 2>/dev/null \
+    | grep -vE "englishforge-(web|api|worker|speech|ai|db|nginx)-1" || true)
+if [ -n "${ORPHANS}" ]; then
+    log "发现孤立容器：${ORPHANS}"
+    echo "${ORPHANS}" | xargs -r docker rm -f 2>/dev/null || true
+fi
+
+DANGLING=$(docker images -f "dangling=true" -q 2>/dev/null | wc -l)
+if [ "${DANGLING}" -gt 0 ]; then
+    docker image prune -f >/dev/null 2>&1 && log "已清理 ${DANGLING} 个悬空镜像" || log "WARN: 悬空镜像清理失败"
+fi
+
+log "=== 升级后清理完成 ==="
+log "提示：新版本将在下次启动应用时生效"
+exit 0
