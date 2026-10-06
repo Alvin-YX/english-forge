@@ -22,6 +22,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0,<9.0",
+    # starlette 的 TestClient 依赖 httpx，测试 healthz/tts 等 HTTP 端点必需。
+    "httpx>=0.27,<1.0",
     "ruff>=0.6,<1.0",
     "mypy>=1.10,<2.0",
 ]

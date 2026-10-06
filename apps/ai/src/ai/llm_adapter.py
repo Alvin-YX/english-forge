@@ -15,12 +15,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-try:
-    from openai import OpenAI
-except ImportError:  # pragma: no cover - 取决于是否安装 openai SDK
-    OpenAI = None
+if TYPE_CHECKING:
+    # 仅供类型检查：``OpenAI`` 运行时可能是 None（SDK 未安装），
+    # 因此这里声明为 Any，避免把 ``OpenAI = None`` 视为给类型赋值。
+    OpenAI: Any
+else:
+    try:
+        from openai import OpenAI
+    except ImportError:  # pragma: no cover - 取决于是否安装 openai SDK
+        OpenAI = None
 
 
 DEFAULT_MODEL = "gpt-4o-mini"
