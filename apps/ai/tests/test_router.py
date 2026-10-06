@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -105,7 +105,7 @@ class TestResolveAdapter:
     def test_openai_with_key_but_missing_sdk_falls_back_gracefully(self) -> None:
         """openai SDK 未安装时不应让服务崩溃，而是回退 FakeLLM。"""
 
-        adapter, fell_back = resolve_adapter(RouterConfig(provider="openai", api_key="sk-x"))
+        adapter, _ = resolve_adapter(RouterConfig(provider="openai", api_key="sk-x"))
         # 无论宿主机是否安装 openai，都不应抛异常
         assert isinstance(adapter, (FakeLLM,)) or hasattr(adapter, "complete")
 
@@ -221,23 +221,21 @@ class TestRouterDegrade:
             def complete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
                 raise LLMError("boom")
 
-        data, degraded = Router(_Failing()).complete_json([{"role": "user", "content": "hi"}])
+        data = Router(_Failing()).complete_json([{"role": "user", "content": "hi"}])
         assert data is None
-        assert degraded is True
 
     def test_complete_json_parses_valid_response(self) -> None:
         class _Scripted:
             def complete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
                 return '{"a": 1}'
 
-        data, degraded = Router(_Scripted()).complete_json([])
+        data = Router(_Scripted()).complete_json([])
         assert data == {"a": 1}
-        assert degraded is False
 
     def test_complete_json_rejects_non_json(self) -> None:
-        data, degraded = Router(FakeLLM()).complete_json([])
-        assert data is None
-        assert degraded is True
+        """FakeLLM 输出非 JSON 时应返回 None，由调用方判定降级。"""
+
+        assert Router(FakeLLM()).complete_json([]) is None
 
     def test_initial_degraded_short_circuits_adapter(self) -> None:
         """标记为已回退时不应再调用真实适配器。"""
@@ -253,18 +251,18 @@ class TestRouterDegrade:
 class TestDegradeIntegration:
     """注入故障适配器，验证所有业务端点均返回 200 且标记降级。"""
 
-    STRUCTURED_ENDPOINTS: dict[str, dict[str, Any]] = {
-        "/translate": {"text": "hello"},
-        "/explain": {"word": "apple", "user_level": "beginner"},
-        "/speak-practice": {"text": "hello world", "level": "beginner"},
-        "/conversation-generate": {"topic": "t", "level": "beginner", "user_id": "u-1"},
+    STRUCTURED_ENDPOINTS: ClassVar[dict[str, tuple[tuple[str, Any], ...]]] = {
+        "/translate": (("text", "hello"),),
+        "/explain": (("word", "apple"), ("user_level", "beginner")),
+        "/speak-practice": (("text", "hello world"), ("level", "beginner")),
+        "/conversation-generate": (("topic", "t"), ("level", "beginner"), ("user_id", "u-1")),
     }
 
     def test_all_structured_endpoints_return_200_when_llm_down(
         self, failing_client: Any
     ) -> None:
-        for path, payload in self.STRUCTURED_ENDPOINTS.items():
-            response = failing_client.post(path, json=payload)
+        for path, fields in self.STRUCTURED_ENDPOINTS.items():
+            response = failing_client.post(path, json=dict(fields))
             assert response.status_code == 200, f"{path} 在 LLM 故障时不应返回 500"
             assert assert_ai_envelope(response.json())["degraded"] is True
 

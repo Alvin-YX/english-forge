@@ -33,7 +33,7 @@ testpaths = ["tests"]
 addopts = "-ra -q"
 pythonpath = ["src"]
 filterwarnings = [
-    "ignore::DeprecationWarning:starlette.testclient",
+    "ignore::UserWarning:fastapi.testclient",
 ]
 
 [tool.ruff]
@@ -70,7 +70,7 @@ strict = true
 plugins = ["pydantic.mypy"]
 files = ["src", "tests"]
 mypy_path = "src"
-packages = ["ai"]
+cache_dir = "~/.cache/mypy/english-forge-ai"
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]

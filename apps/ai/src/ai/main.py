@@ -91,7 +91,7 @@ def create_app() -> FastAPI:
         """文本翻译。"""
 
         prompt = TRANSLATE_PROMPT.format(text=payload.text, target_lang=payload.target_lang)
-        data, degraded = router.complete_json([_message(prompt)], temperature=DEFAULT_TEMPERATURE)
+        data = router.complete_json([_message(prompt)], temperature=DEFAULT_TEMPERATURE)
 
         if data is None:
             result = TranslateResponse(
@@ -115,7 +115,7 @@ def create_app() -> FastAPI:
 
         level = payload.user_level.value
         prompt = EXPLAIN_WORD_PROMPT.format(word=payload.word, level=level)
-        data, degraded = router.complete_json([_message(prompt)], temperature=DEFAULT_TEMPERATURE)
+        data = router.complete_json([_message(prompt)], temperature=DEFAULT_TEMPERATURE)
 
         if data is None:
             result = ExplainResponse(word=payload.word, degraded=True)
@@ -136,7 +136,7 @@ def create_app() -> FastAPI:
         """口语陪练反馈。"""
 
         prompt = SPEAK_FEEDBACK_PROMPT.format(text=payload.text, level=payload.level.value)
-        data, degraded = router.complete_json([_message(prompt)], temperature=DEFAULT_TEMPERATURE)
+        data = router.complete_json([_message(prompt)], temperature=DEFAULT_TEMPERATURE)
 
         if data is None:
             result = SpeakFeedbackResponse(degraded=True)
@@ -166,7 +166,7 @@ def create_app() -> FastAPI:
 
         level = payload.level.value
         prompt = CONVERSATION_GENERATE_PROMPT.format(topic=payload.topic, level=level)
-        data, degraded = router.complete_json([_message(prompt)], temperature=DEFAULT_TEMPERATURE)
+        data = router.complete_json([_message(prompt)], temperature=DEFAULT_TEMPERATURE)
 
         if data is None:
             result = ConversationGenerateResponse(topic=payload.topic, level=payload.level, degraded=True)

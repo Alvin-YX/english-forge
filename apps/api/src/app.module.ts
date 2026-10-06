@@ -36,9 +36,13 @@ import { ProfileGuard } from './infra/profile/profile.guard.js';
 import { RolesGuard } from './infra/profile/rbac.guard.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { ContentModule } from './modules/content/content.module.js';
+import { ConversationModule } from './modules/conversation/conversation.module.js';
 import { ErrorBookModule } from './modules/errorbook/errorbook.module.js';
+import { GamificationModule } from './modules/gamification/gamification.module.js';
 import { LearningModule } from './modules/learning/learning.module.js';
 import { MediaModule } from './modules/media/media.module.js';
+import { ReportModule } from './modules/report/report.module.js';
+import { SchedulerModule } from './modules/scheduler/scheduler.module.js';
 import { SystemModule } from './modules/system/system.module.js';
 import { TaxonomyModule } from './modules/taxonomy/taxonomy.module.js';
 import { UserModule } from './modules/user/user.module.js';
@@ -57,7 +61,11 @@ import { UserModule } from './modules/user/user.module.js';
     ContentModule,
     LearningModule,
     ErrorBookModule,
+    GamificationModule,
+    ConversationModule,
     SystemModule,
+    ReportModule,
+    SchedulerModule,
   ],
   providers: [
     // ── 全局守卫（顺序敏感）────────────────────────────────

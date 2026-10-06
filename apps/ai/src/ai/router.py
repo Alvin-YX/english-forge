@@ -168,17 +168,20 @@ class Router:
             logger.exception("LLM 调用出现未预期异常")
             return LLMCompletion(content="", degraded=True, reason=repr(exc))
 
-    def complete_json(self, messages: list[dict[str, str]], **kwargs: Any) -> tuple[dict[str, Any] | None, bool]:
-        """调用并解析 JSON；返回 ``(data, degraded)``，解析失败时 data 为 ``None``。"""
+    def complete_json(self, messages: list[dict[str, str]], **kwargs: Any) -> dict[str, Any] | None:
+        """调用并解析 JSON 对象；失败（故障/空输出/非 JSON）时返回 ``None``。
+
+        调用方以「是否为 ``None``」判定是否降级，避免额外的布尔标志位。
+        """
 
         completion = self.complete(messages, **kwargs)
         if completion.degraded or not completion.content:
-            return None, True
+            return None
         data = extract_json(completion.content)
         if data is None:
             logger.warning("LLM 输出非 JSON，返回降级结果：%s", completion.content[:200])
-            return None, True
-        return data, False
+            return None
+        return data
 
 
 def build_router(config: RouterConfig | None = None) -> Router:

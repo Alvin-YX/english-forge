@@ -20,5 +20,5 @@ class TTSEngine(Protocol):
 class FakeTTS:
     """测试用假 TTS：返回固定字节，避免拉起真实语音模型。"""
 
-    def synthesize(self, text: str, voice: str) -> bytes: - 显式忽略入参
+    def synthesize(self, text: str, voice: str) -> bytes:  # 入参仅用于满足协议签名
         return b"fake_audio_data"
