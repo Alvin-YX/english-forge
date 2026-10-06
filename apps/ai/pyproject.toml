@@ -76,3 +76,8 @@ explicit_package_bases = true
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
+
+# openai 官方未随包分发类型存根，且本服务在未安装 SDK 时也必须能通过类型检查。
+[[tool.mypy.overrides]]
+module = ["openai"]
+ignore_missing_imports = true

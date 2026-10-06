@@ -3,7 +3,11 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 
+import { AchievementsPage } from './pages/achievements/AchievementsPage';
+import { ConversationPage } from './pages/conversation/ConversationPage';
 import { DictationPractice } from './pages/learning/DictationPractice';
+import { GamificationPage } from './pages/gamification/GamificationPage';
+import { ReportPage } from './pages/report/ReportPage';
 import { SpellingPractice } from './pages/learning/SpellingPractice';
 import { WordCardPractice } from './pages/learning/WordCardPractice';
 import { ErrorBookPage } from './pages/errorbook/ErrorBookPage';
@@ -36,6 +40,11 @@ export default function App() {
         <Route path="/practice/spelling" element={<SpellingPractice />} />
         <Route path="/practice/dictation" element={<DictationPractice />} />
         <Route path="/errorbook" element={<ErrorBookPage />} />
+        <Route path="/gamification" element={<GamificationPage />} />
+        <Route path="/conversation" element={<ConversationPage />} />
+        <Route path="/conversation/:conversationId" element={<ConversationPage />} />
+        <Route path="/reports" element={<ReportPage />} />
+        <Route path="/achievements" element={<AchievementsPage />} />
         <Route path="/parent/dashboard" element={<ParentDashboard />} />
         <Route path="/profile" element={<ProfilePage />} />
       </Route>

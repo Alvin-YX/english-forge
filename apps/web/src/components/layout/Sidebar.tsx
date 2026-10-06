@@ -22,6 +22,10 @@ const practiceNav: NavItem[] = [
 
 const otherNav: NavItem[] = [
   { to: '/errorbook', label: '错题本', icon: '📕' },
+  { to: '/gamification', label: '游戏化', icon: '🏆' },
+  { to: '/conversation', label: 'AI 对话', icon: '🤖' },
+  { to: '/reports', label: '学习报告', icon: '📊' },
+  { to: '/achievements', label: '成就', icon: '🎖️' },
   { to: '/parent/dashboard', label: '家长后台', icon: '👪' },
   { to: '/profile', label: '我的', icon: '⚙️' },
 ];

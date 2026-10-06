@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+      - speech
+      - ai
+    restart: unless-stopped
+    networks:
+      - forge-net
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://forge:forge_password@postgres:5432/englishforge
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET:-change-me-in-production}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-change-me-in-production}
+      - JWT_ISSUER=english-forge
+      - CORS_ORIGINS=*
+      - MEDIA_ROOT=/data/media
+      - SPEECH_URL=http://speech:8001
+      - AI_URL=http://ai:8002
+    volumes:
+      - media-data:/data/media
+    depends_on:
+      - postgres
+      - speech
+      - ai
+    restart: unless-stopped
+    networks:
+      - forge-net
+
+  speech:
+    build:
+      context: .
+      dockerfile: apps/speech/Dockerfile
+    restart: unless-stopped
+    networks:
+      - forge-net
+
+  ai:
+    build:
+      context: .
+      dockerfile: apps/ai/Dockerfile
+    environment:
+      - AI_PROVIDER=fake
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_MODEL=${AI_MODEL:-gpt-4o}
+      - AI_BASE_URL=${AI_BASE_URL:-}
+      - AI_TIMEOUT=${AI_TIMEOUT:-30}
+    restart: unless-stopped
+    networks:
+      - forge-net
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=forge
+      - POSTGRES_PASSWORD=forge_password
+      - POSTGRES_DB=englishforge
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - forge-net
+
+volumes:
+  pg-data:
+  media-data:
+
+networks:
+  forge-net:
+    driver: bridge

@@ -20,7 +20,7 @@ from typing import Any, Protocol, runtime_checkable
 try:
     from openai import OpenAI
 except ImportError:  # pragma: no cover - 取决于是否安装 openai SDK
-    OpenAI = None  # type: ignore[assignment]
+    OpenAI = None
 
 
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -68,7 +68,7 @@ class OpenAIAdapter:
             raise LLMError("openai SDK 未安装：pip install openai 或将 AI_PROVIDER 设为 fake")
         if not api_key:
             raise LLMError("OpenAIAdapter 缺少 api_key")
-        self._client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+        self._client: Any = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
         self._model = model
 
     def complete(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
@@ -76,7 +76,7 @@ class OpenAIAdapter:
             response = self._client.chat.completions.create(model=self._model, messages=messages, **kwargs)
         except Exception as exc:  # 网络/鉴权/限流统一收敛为 LLMError
             raise LLMError(f"openai call failed: {exc}") from exc
-        content = response.choices[0].message.content
+        content: str | None = response.choices[0].message.content
         if not content:
             raise LLMError("openai returned empty content")
         return content
