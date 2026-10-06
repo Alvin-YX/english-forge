@@ -203,6 +203,56 @@ class FakeAligner:  # 单测用，无需模型
 | D-13 | 本机 npm registry 不可达 | 项目根 `.npmrc` 配 npmmirror 镜像 |
 | D-14 | 本机无 Docker | 容器验证与真实模型测试 → 输出脚本+手册，邢工在 NAS 执行回传 |
 | D-15 | Python 3.13 vs 文档 3.12 | `requirements.txt` 用 `>=3.12,<3.14`；不使用 3.12 独有语法 |
+| D-16 | 工作区在 NFS 网络盘，Windows 报 `ENOTSUP`（不支持 symlink） | `.npmrc` 改 `node-linker=hoisted` + `shamefully-hoist=true`；workspace 包用 `scripts/link-workspace-packages.mjs` **实体拷贝**（见下方「NFS 网络盘工作区」）。偏离原设计的 isolated 布局，牺牲磁盘占用换 NFS 可用性 |
+| D-17 | NFS 不保证 rename 原子性，pnpm「复制到临时目录 → rename」策略必然失败 | 安装走 `bash scripts/install-loop.sh`：失败后清掉残留的 `*_tmp_<pid>` 目录再重试，pnpm 幂等，多轮必然收敛 |
+
+### NFS 网络盘工作区（必读）
+
+本仓库部署在 NFS/SMB 网络盘（`\\192.168.31.188\fs\1000\nfs\WorkBuddy\英语学习\english-forge`），有三个绕不开的坑。**在 Windows 上开发本项目前先读完这一节。**
+
+#### 1. 必须通过映射盘符访问，不能用 UNC 路径
+
+`pnpm` / `npm` / `cmd.exe` 在 UNC 路径下会直接失败：
+
+```
+CMD.EXE was started with the above path as the current directory.
+UNC paths are not supported.  Defaulting to Windows directory.
+```
+
+先映射一个盘符（PowerShell，一次即可，注销后失效需重做）：
+
+```powershell
+& net.exe use W: "\\192.168.31.188\fs\1000\nfs\WorkBuddy\英语学习"
+```
+
+之后所有命令用 `W:\english-forge\...`。本文档中出现的 `cd /w/english-forge` 是 Git Bash 下的同一路径。
+
+#### 2. 装依赖必须用 install-loop.sh，不能直接 `pnpm install`
+
+NFS 上 rename 会报 `EEXIST` / `EPERM`，并在 `node_modules/` 留下 `<pkg>_tmp_<pid>` 残留目录。清理后重试即可推进（pnpm 幂等）：
+
+```bash
+cd /w/english-forge
+bash scripts/install-loop.sh 15
+```
+
+该脚本等价于反复执行 `pnpm install --ignore-scripts --config.inject-workspace-packages=true`，每次失败后调用 `scripts/clean-nfs-tmp.mjs` 清理残留。两个参数的原因：
+
+- `--ignore-scripts`：跳过 postinstall。`argon2` 的 postinstall 会在包内再建一层 `node_modules/`，正好撞上 NFS 的 rename 缺陷。
+- `inject-workspace-packages`：workspace 包改为硬拷贝。但 pnpm 仍要为「直接根依赖」建 symlink，NFS 同样不支持，所以这一项**单独用并不够**。
+
+#### 3. workspace 包需要手动实体拷贝
+
+NFS 完全不支持 symlink（`ENOTSUP: operation not supported on socket, symlink`），所以 pnpm 装完后 `@eng-forge/*` 仍是空目录。必须补一步：
+
+```bash
+cd /w/english-forge
+node scripts/link-workspace-packages.mjs
+```
+
+它把 `packages/*` 实体拷进各宿主的 `node_modules/@eng-forge/`。这些包都是「源码直出」型（`package.json` 的 `main`/`types` 指向 `./src/index.ts`），拷源码即可被 `tsc` / `tsx` / `vitest` 解析，无需构建产物。
+
+**因此：改了 `packages/*` 下的源码后，要重跑一次这个脚本**，否则 `apps/*` 用的还是旧副本。
 
 ### 许可与 AGPL
 
