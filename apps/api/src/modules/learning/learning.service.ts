@@ -37,6 +37,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
 import { internalInvariantError, notFoundError } from '../../common/errors.business.js';
+import { boolQuery } from '../../common/bool-query.js';
 import { DbConnection } from '../../infra/db/db.module.js';
 import { asc, count, desc, eq, gte, lte, type PgUpdateSetSource, type SQL, sql } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
@@ -139,8 +140,10 @@ export const GET_MASTERY_QUERY_SCHEMA = z.object({
   pageSize: z.coerce.number().int().positive().max(100).optional().default(20),
   sortBy: z.enum(['overallScore', 'lastPracticed', 'fsrsNextReview']).optional().default('overallScore'),
   sortDir: z.enum(['asc', 'desc']).optional().default('desc'),
-  dueOnly: z.coerce.boolean().optional().default(false),
-  leechOnly: z.coerce.boolean().optional().default(false),
+  // 🔴 不能用 z.coerce.boolean()：JS Boolean('true')===true 也===Boolean('false')，
+  //    于是 ?dueOnly=false 会被解析成 true，「只看未到期」变「只看已到期」。
+  dueOnly: boolQuery().optional().default(false),
+  leechOnly: boolQuery().optional().default(false),
 });
 
 export const UPDATE_MASTERY_SCHEMA = z.object({

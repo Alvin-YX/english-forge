@@ -398,14 +398,16 @@ describe('ErrorBook Module - 分页与过滤', () => {
 describe('ErrorBook Module - 操作端点', () => {
   let token: string;
   let errorBookId: number;
+  let sampleId: number;
 
   beforeAll(async () => {
     token = await registerAndGetToken('errorbook_ops_user', 'password123', 'ErrorBook Ops User');
     const userId = await getUserId(token);
     // 🔴 用回读的真实 id，别硬编码 1 —— 本文件多个 describe 共用一份 SQLite，
     //    自增 id 会随前面用例漂移，硬编码会让详情/操作端点全部 404。
-    const { errorBookIds } = await insertErrorBookData(userId);
+    const { errorBookIds, errorSampleIds } = await insertErrorBookData(userId);
     errorBookId = errorBookIds[0] ?? 0;
+    sampleId = errorSampleIds[0] ?? 0;
   });
 
   it('GET /errorbook/:id → 200 详情', async () => {
@@ -455,17 +457,17 @@ describe('ErrorBook Module - 操作端点', () => {
   });
 
   it('GET /errorbook/samples/:id → 200 样本详情', async () => {
-    const { status, body } = await get('/errorbook/samples/1', token);
+    const { status, body } = await get(`/errorbook/samples/${sampleId}`, token);
     expect(status).toBe(200);
     expect(body.code).toBe(ErrorCode.OK);
     const data = body.data as { id: number; category: string; replayCount: number };
-    expect(data.id).toBe(1);
+    expect(data.id).toBe(sampleId);
     expect(data.category).toBe('speak');
     expect(data.replayCount).toBe(0);
   });
 
   it('POST /errorbook/samples/:id/replay → 200 回放样本', async () => {
-    const { status, body } = await post('/errorbook/samples/1/replay', {}, token);
+    const { status, body } = await post(`/errorbook/samples/${sampleId}/replay`, {}, token);
     expect(status).toBe(200);
     expect(body.code).toBe(ErrorCode.OK);
     const data = body.data as { replayCount: number };
@@ -473,13 +475,13 @@ describe('ErrorBook Module - 操作端点', () => {
   });
 
   it('DELETE /errorbook/samples/:id → 200 删除样本', async () => {
-    const { status, body } = await del('/errorbook/samples/1', token);
+    const { status, body } = await del(`/errorbook/samples/${sampleId}`, token);
     expect(status).toBe(200);
     expect(body.code).toBe(ErrorCode.OK);
   });
 
   it('GET /errorbook/samples/:id → 404 删除后不存在', async () => {
-    const { status, body } = await get('/errorbook/samples/1', token);
+    const { status, body } = await get(`/errorbook/samples/${sampleId}`, token);
     expect(status).toBe(404);
     expect(body.code).toBe(ErrorCode.RESOURCE_NOT_FOUND);
   });

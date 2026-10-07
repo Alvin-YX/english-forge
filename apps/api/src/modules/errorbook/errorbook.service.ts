@@ -29,6 +29,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
 import { notFoundError } from '../../common/errors.business.js';
+import { boolQuery } from '../../common/bool-query.js';
 import { DbConnection } from '../../infra/db/db.module.js';
 import { count, desc, eq, type SQL, sql } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
@@ -89,10 +90,10 @@ export const LIST_ERRORBOOK_QUERY_SCHEMA = z.object({
   page: POSITIVE_INT.optional().default(1),
   pageSize: z.coerce.number().int().positive().max(100).optional().default(20),
   category: z.enum(['speak', 'spell', 'grammar', 'listen', 'reading']).optional(),
-  resolved: z.coerce.boolean().optional(),
+  resolved: boolQuery().optional(),
   // 🔴 过滤条件不能带默认值：不传 favorite 应表示「不按收藏过滤」，
   //    而 `.default(false)` 会让列表只剩未收藏项（实测 3 条里少 1 条）。
-  favorite: z.coerce.boolean().optional(),
+  favorite: boolQuery().optional(),
   sortBy: z.enum(['wrongCount', 'lastError', 'createdAt']).optional().default('lastError'),
 });
 
@@ -102,7 +103,10 @@ export const LIST_ERRORSAMPLES_QUERY_SCHEMA = z.object({
   category: z.enum(['speak', 'spell']).optional(),
   priority: z.enum(['normal', 'high']).optional(),
   wordId: POSITIVE_INT.optional(),
-  includePurged: z.coerce.boolean().optional().default(false),
+  // 🔴 不能用 z.coerce.boolean()：JS Boolean('false')===true，
+  //    于是 ?includePurged=true 会被解析成 false，「含已清除」变「只看未清除」。
+  //    默认 false（默认只看未清除样本）语义正确，保留。
+  includePurged: boolQuery().optional().default(false),
 });
 
 export const RESOLVE_ERRORBOOK_SCHEMA = z.object({

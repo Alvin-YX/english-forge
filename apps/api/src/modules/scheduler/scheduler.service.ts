@@ -11,6 +11,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
 import { notFoundError } from '../../common/errors.business.js';
+import { boolQuery } from '../../common/bool-query.js';
 import { DbConnection } from '../../infra/db/db.module.js';
 import { asc, count, desc, eq, sql } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
@@ -54,7 +55,9 @@ export const LIST_NOTICES_QUERY_SCHEMA = z.object({
   pageSize: z.coerce.number().int().positive().max(100).optional().default(20),
   category: z.enum(['degrade', 'expiry', 'review', 'report', 'system']).optional(),
   level: z.enum(['info', 'warning', 'critical']).optional(),
-  read: z.coerce.boolean().optional(),
+  // 🔴 不能用 z.coerce.boolean()：JS Boolean('false')===true，
+  //    于是 ?read=false 会被解析成 true，「只看未读」变「只看已读」。
+  read: boolQuery().optional(),
 });
 
 export type ListJobsQuery = z.infer<typeof LIST_JOBS_QUERY_SCHEMA>;
@@ -160,7 +163,7 @@ export class SchedulerService {
       link: row.link ?? undefined,
       refType: row.refType ?? undefined,
       refId: row.refId ?? undefined,
-      readAt: row.readAt?.toISOString() ?? undefined,
+      readAt: row.readAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     }));
 

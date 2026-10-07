@@ -9,6 +9,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Inject,
   Param,
   Patch,
@@ -81,6 +82,7 @@ export class ErrorBookController {
 
   /** POST /errorbook/samples/:id/replay —— 回放错误样本 */
   @Post('samples/:id/replay')
+  @HttpCode(200)
   @ApiOperation({ summary: '回放错误样本（更新 replay_count）' })
   async replay(
     @CurrentUser() scope: ProfileScope,
@@ -103,6 +105,7 @@ export class ErrorBookController {
 
   /** POST /errorbook/:id/resolve —— 标记已解决（right_streak ≥ 3 自动出清） */
   @Post(':id/resolve')
+  @HttpCode(200)
   @ApiOperation({ summary: '标记已解决（right_streak ≥ 3 自动出清）' })
   async resolve(
     @CurrentUser() scope: ProfileScope,
@@ -113,12 +116,26 @@ export class ErrorBookController {
 
   /** POST /errorbook/:id/favorite —— 切换收藏 */
   @Post(':id/favorite')
+  @HttpCode(200)
   @ApiOperation({ summary: '切换收藏' })
   async toggleFavorite(
     @CurrentUser() scope: ProfileScope,
     @Param('id', zodPipe(POSITIVE_INT)) id: number,
   ): Promise<ErrorBookView> {
     return this.service.toggleFavorite(scope, id);
+  }
+
+  /** DELETE /errorbook/samples/:id —— 删除错误样本 */
+  // 🔴 静态 `samples/:id` 必须声明在通配 `:id` 之前，否则
+  //    DELETE /errorbook/samples/1 会被 `@Delete(':id')` 抢先命中，
+  //    `id='samples'` 校验通过后去查 error_book 表 → 404（而不是删除样本）。
+  @Delete('samples/:id')
+  @ApiOperation({ summary: '删除错误样本' })
+  async deleteSample(
+    @CurrentUser() scope: ProfileScope,
+    @Param('id', zodPipe(POSITIVE_INT)) id: number,
+  ): Promise<void> {
+    return this.service.deleteErrorSample(scope, id);
   }
 
   /** DELETE /errorbook/:id —— 删除错题 */
@@ -129,15 +146,5 @@ export class ErrorBookController {
     @Param('id', zodPipe(POSITIVE_INT)) id: number,
   ): Promise<void> {
     return this.service.deleteErrorBook(scope, id);
-  }
-
-  /** DELETE /errorbook/samples/:id —— 删除错误样本 */
-  @Delete('samples/:id')
-  @ApiOperation({ summary: '删除错误样本' })
-  async deleteSample(
-    @CurrentUser() scope: ProfileScope,
-    @Param('id', zodPipe(POSITIVE_INT)) id: number,
-  ): Promise<void> {
-    return this.service.deleteErrorSample(scope, id);
   }
 }
