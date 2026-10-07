@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 
-import { Button } from '../ui/Button';
 import { useAuthStore } from '../../stores/auth';
+import { Button } from '../ui/Button';
 
 export function Header() {
   const user = useAuthStore((s) => s.user);

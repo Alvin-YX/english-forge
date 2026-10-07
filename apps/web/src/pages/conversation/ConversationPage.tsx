@@ -1,12 +1,13 @@
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { api } from '../../lib/api';
+import { PageLoader } from '../../components/common/PageLoader';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Card, CardHeader } from '../../components/ui/Card';
-import { PageLoader } from '../../components/common/PageLoader';
+import { Card } from '../../components/ui/Card';
 import { Spinner } from '../../components/ui/Spinner';
+import { api } from '../../lib/api';
 import type { ConversationView, MessageView, PaginatedResponse } from '../../lib/types';
 
 const MODES = [
@@ -189,7 +190,7 @@ export function ConversationPage() {
   }, [current, finishing, loadList]);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         void handleSend();

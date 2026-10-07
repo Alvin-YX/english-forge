@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { api } from '../../lib/api';
+import { PageLoader } from '../../components/common/PageLoader';
 import { Badge } from '../../components/ui/Badge';
 import { Card } from '../../components/ui/Card';
-import { PageLoader } from '../../components/common/PageLoader';
+import { api } from '../../lib/api';
 import type { HeatmapCell, HeatmapData } from '../../stores/learning';
 
 const levelColors: Record<0 | 1 | 2 | 3 | 4, string> = {

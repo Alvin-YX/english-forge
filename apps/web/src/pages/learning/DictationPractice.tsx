@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 
-import { api } from '../../lib/api';
-import type { SentenceItem } from '../../lib/types';
+import { PageLoader } from '../../components/common/PageLoader';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { PageLoader } from '../../components/common/PageLoader';
+import { api } from '../../lib/api';
+import type { SentenceItem } from '../../lib/types';
 
 const FALLBACK_SENTENCES: SentenceItem[] = [
   { id: '1', sentence: 'The sun rises in the east.', translation: '太阳从东方升起。' },

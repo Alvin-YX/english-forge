@@ -1,28 +1,27 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
-import { AppShell } from './components/layout/AppShell';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
-
+import { AppShell } from './components/layout/AppShell';
 import { AchievementsPage } from './pages/achievements/AchievementsPage';
+import { LoginPage } from './pages/auth/LoginPage';
+import { RegisterPage } from './pages/auth/RegisterPage';
+import { ConversationPage } from './pages/conversation/ConversationPage';
+import { HeatmapPage } from './pages/dashboard/HeatmapPage';
+import { StreakPage } from './pages/dashboard/StreakPage';
+import { TodayPage } from './pages/dashboard/TodayPage';
+import { ErrorBookPage } from './pages/errorbook/ErrorBookPage';
 import { Match4Game } from './pages/games/Match4Game';
 import { MinerGame } from './pages/games/MinerGame';
 import { SpellTruckGame } from './pages/games/SpellTruckGame';
 import { WordShooterGame } from './pages/games/WordShooterGame';
-import { ConversationPage } from './pages/conversation/ConversationPage';
+import { GamificationPage } from './pages/gamification/GamificationPage';
 import { DictationPractice } from './pages/learning/DictationPractice';
 import { ShadowingPractice } from './pages/learning/ShadowingPractice';
-import { GamificationPage } from './pages/gamification/GamificationPage';
-import { ReportPage } from './pages/report/ReportPage';
 import { SpellingPractice } from './pages/learning/SpellingPractice';
 import { WordCardPractice } from './pages/learning/WordCardPractice';
-import { ErrorBookPage } from './pages/errorbook/ErrorBookPage';
-import { HeatmapPage } from './pages/dashboard/HeatmapPage';
-import { LoginPage } from './pages/auth/LoginPage';
 import { ParentDashboard } from './pages/parent/ParentDashboard';
 import { ProfilePage } from './pages/parent/ProfilePage';
-import { RegisterPage } from './pages/auth/RegisterPage';
-import { StreakPage } from './pages/dashboard/StreakPage';
-import { TodayPage } from './pages/dashboard/TodayPage';
+import { ReportPage } from './pages/report/ReportPage';
 
 export default function App() {
   return (

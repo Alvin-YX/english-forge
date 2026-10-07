@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { api } from '../../lib/api';
-import type { WordCard } from '../../lib/types';
+import { PageLoader } from '../../components/common/PageLoader';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { PageLoader } from '../../components/common/PageLoader';
+import { api } from '../../lib/api';
+import type { WordCard } from '../../lib/types';
 
 const FALLBACK_WORDS: WordCard[] = [
   { id: '1', headword: 'apple', phonetic: '/ˈæpəl/', translation: '苹果', definition: '一种常见的水果，红色或绿色，圆形。' },
@@ -97,7 +97,7 @@ export function WordCardPractice() {
                 <p className="text-2xl font-bold text-slate-900">{current.translation}</p>
                 <p className="mt-2 text-sm text-slate-500">{current.definition}</p>
                 {current.example ? (
-                  <p className="mt-4 text-sm italic text-slate-600">"…{current.example}…"</p>
+                  <p className="mt-4 text-sm italic text-slate-600">&quot;…{current.example}…&quot;</p>
                 ) : null}
               </div>
             </div>

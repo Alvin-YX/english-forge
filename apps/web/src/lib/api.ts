@@ -1,7 +1,8 @@
 import type { ApiResponse } from '@eng-forge/contracts';
 
-import { API_BASE_URL, TOKEN_KEY_ACCESS, TOKEN_KEY_REFRESH } from './env';
 import { clearAuth } from '../stores/auth';
+
+import { API_BASE_URL, TOKEN_KEY_ACCESS, TOKEN_KEY_REFRESH } from './env';
 
 export class ApiClientError extends Error {
   readonly status: number;
@@ -15,7 +16,7 @@ export class ApiClientError extends Error {
   }
 }
 
-type ApiOptions = Omit<RequestInit, 'body'> & {
+type ApiOptions = Omit<globalThis.RequestInit, 'body'> & {
   body?: unknown;
   skipAuth?: boolean;
   signal?: AbortSignal;

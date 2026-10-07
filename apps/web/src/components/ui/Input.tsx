@@ -14,7 +14,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   ref,
 ) {
   const inputId = id ?? (typeof label === 'string' ? `input-${label.replace(/\s+/g, '-')}` : undefined);
-  const hasWrapper = prefix || suffix;
 
   return (
     <div className="w-full">

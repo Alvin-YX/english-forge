@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { api } from '../../lib/api';
-import type { ErrorBookItem } from '../../lib/types';
+import { PageLoader } from '../../components/common/PageLoader';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { PageLoader } from '../../components/common/PageLoader';
+import { api } from '../../lib/api';
+import type { ErrorBookItem } from '../../lib/types';
 
 type Tab = 'list' | 'samples';
 
@@ -21,7 +21,6 @@ export function ErrorBookPage() {
   const [items, setItems] = useState<ErrorBookItem[]>([]);
   const [samples, setSamples] = useState<ErrorBookItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [empty, setEmpty] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -32,11 +31,9 @@ export function ErrorBookPage() {
       ]);
       setItems(list ?? []);
       setSamples(sampleList ?? []);
-      setEmpty(list.length === 0);
     } catch {
       setItems([]);
       setSamples([]);
-      setEmpty(true);
     } finally {
       setLoading(false);
     }

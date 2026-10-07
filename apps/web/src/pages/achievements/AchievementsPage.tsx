@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { api } from '../../lib/api';
+import { PageLoader } from '../../components/common/PageLoader';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, StatCard } from '../../components/ui/Card';
-import { PageLoader } from '../../components/common/PageLoader';
+import { api } from '../../lib/api';
 import type {
   BadgeView,
   GameRecordView,

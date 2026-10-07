@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 
-import { api } from '../../lib/api';
-import type { ChildProfile } from '../../lib/types';
+import { PageLoader } from '../../components/common/PageLoader';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, StatCard } from '../../components/ui/Card';
-import { PageLoader } from '../../components/common/PageLoader';
+import { api } from '../../lib/api';
+import type { ChildProfile } from '../../lib/types';
 
 const FALLBACK_CHILDREN: ChildProfile[] = [
   {
