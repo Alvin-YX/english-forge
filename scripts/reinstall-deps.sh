@@ -50,9 +50,39 @@ done
 echo "  使用 pnpm: $PNPM_BIN"
 
 if [[ "$PNPM_BIN" == *.cjs ]]; then
-  node "$PNPM_BIN" install --store-dir "$STORE" --ignore-scripts
+  node "$PNPM_BIN" install --store-dir "$STORE"
 else
-  "$PNPM_BIN" install --store-dir "$STORE" --ignore-scripts
+  "$PNPM_BIN" install --store-dir "$STORE"
+fi
+
+# better-sqlite3 是原生模块，必须有编译好的 .node 二进制，否则所有 DB 测试报
+# "Could not locate the bindings file"。走 --ignore-scripts 或在 NFS 上装都会漏掉，
+# 这里显式校验并给出可执行的补救指引。
+if [ ! -f "$LOCAL_ROOT/node_modules/better-sqlite3/build/Release/better_sqlite3.node" ]; then
+  echo ""
+  echo "  ⚠ better-sqlite3 原生二进制缺失，尝试下载官方预编译产物..."
+  # 从 npmmirror 的二进制镜像取。ABI 版本随 Node 主版本变化（Node 22 → v127）。
+  BS_VER=$(node -p "require('$LOCAL_ROOT/node_modules/better-sqlite3/package.json').version" 2>/dev/null || echo "")
+  NODE_ABI=$(node -p "process.versions.modules" 2>/dev/null || echo "")
+  if [ -n "$BS_VER" ] && [ -n "$NODE_ABI" ]; then
+    TARBALL="better-sqlite3-v${BS_VER}-node-v${NODE_ABI}-win32-x64.tar.gz"
+    URL="https://registry.npmmirror.com/-/binary/better-sqlite3/v${BS_VER}/${TARBALL}"
+    TMP_TGZ="$(mktemp -d)/${TARBALL}"
+    if curl -fsSL -o "$TMP_TGZ" "$URL"; then
+      mkdir -p "$LOCAL_ROOT/node_modules/better-sqlite3/build/Release"
+      tar -xzf "$TMP_TGZ" -C "$LOCAL_ROOT/node_modules/better-sqlite3/build/Release"
+      if [ -f "$LOCAL_ROOT/node_modules/better-sqlite3/build/Release/better_sqlite3.node" ]; then
+        echo "  ✓ 已安装 better-sqlite3 ${BS_VER} (node-v${NODE_ABI})"
+      else
+        echo "  ✗ 解压后仍未找到 .node，DB 测试会失败"
+      fi
+    else
+      echo "  ✗ 下载失败：${URL}"
+      echo "    可手动下载后解压到 node_modules/better-sqlite3/build/Release/"
+    fi
+  else
+    echo "  ✗ 无法确定 better-sqlite3 版本或 Node ABI，需手动处理"
+  fi
 fi
 
 echo "=== 4/4 拷回 NFS ==="
