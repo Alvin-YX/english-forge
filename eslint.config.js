@@ -42,6 +42,10 @@ export default [
       globals: {
         ...globals.node,
         ...globals.browser,
+        // @types/node 定义的命名空间，ESLint 不会自动识别，需要显式声明。
+        // 出现位置：packages/db/src/client.ts 与 apps/api/test/helpers/test-env.ts 的
+        // `NodeJS.ProcessEnv` 类型标注。
+        NodeJS: 'readonly',
       },
     },
     plugins: {
@@ -59,6 +63,11 @@ export default [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
+
+      // 🔴 关闭 base no-redeclare：TS 编译器对 redeclaration 有原生检查（比 ESLint 更准），
+      //    且 ESLint 的 no-redeclare 对 TS enum-style 模式（export const X + export type X = ...）
+      //    误报 —— packages/contracts/src 里所有 enum 都是这个模式，23 处都是假阳性。
+      'no-redeclare': 'off',
 
       // 禁止 any（CONTRIBUTING.md §3）
       '@typescript-eslint/no-explicit-any': 'error',

@@ -8,7 +8,13 @@
  * 从数据结构上杜绝教材课文分发。
  */
 
-import type { Accent, ExerciseKind, FrequencyBand, Role } from '../enums/index.js';
+import type { Accent, ExerciseKind, FrequencyBand, Role ,
+  ConfidenceLevel,
+  DictationColor,
+  ErrorCategory,
+  RecordKind,
+  ScoreDegradeLevel,
+} from '../enums/index.js';
 
 // ═══════════════════════════════════════════════════════════
 // 学段
@@ -248,13 +254,6 @@ export interface FsrsCard {
 // 学习记录（统一大表）
 // ═══════════════════════════════════════════════════════════
 
-import type {
-  ConfidenceLevel,
-  DictationColor,
-  ErrorCategory,
-  RecordKind,
-  ScoreDegradeLevel,
-} from '../enums/index.js';
 
 /** 拼写/听写四色 diff 明细（REQ-007） */
 export interface DiffToken {

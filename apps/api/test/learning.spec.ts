@@ -6,8 +6,8 @@ import { NestFactory, type NestApplication } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AppModule } from '../src/app.module.js';
-import { DbConnection } from '../src/infra/db/db.module.js';
 import { parseEnv } from '../src/infra/config/env.js';
+import { DbConnection } from '../src/infra/db/db.module.js';
 
 import { at } from './helpers/assert.js';
 import { createTestDb, setupTestEnv } from './helpers/test-env.js';

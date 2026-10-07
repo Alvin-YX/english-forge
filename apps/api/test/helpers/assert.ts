@@ -11,10 +11,10 @@
  *   哪个用例、哪个下标越界，一目了然。
  */
 
-import { expect } from 'vitest';
 
 import type { ApiResponse } from '@eng-forge/contracts/api';
 import { ErrorCode } from '@eng-forge/contracts/api';
+import { expect } from 'vitest';
 
 /** 拆出 `data` 并断言业务码为 OK —— 失败时直接打印 code + message */
 export function expectOk<T>(body: ApiResponse<unknown>): T {

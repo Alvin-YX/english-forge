@@ -5,6 +5,7 @@
  * 唯一例外：GET /games/:gameCode/leaderboard 是跨用户排行榜。
  */
 
+import { GAME_CODES } from '@eng-forge/db/schema';
 import {
   Body,
   Controller,
@@ -41,7 +42,6 @@ import {
   SUBMIT_GAME_SCHEMA,
   UPDATE_PROGRESS_SCHEMA,
 } from './gamification.service.js';
-import { GAME_CODES } from '@eng-forge/db/schema';
 
 const POSITIVE_INT = z.coerce.number().int().positive();
 const GAME_CODE_PARAM = z.enum([...GAME_CODES]);

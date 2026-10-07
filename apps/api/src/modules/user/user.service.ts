@@ -13,12 +13,13 @@
  */
 
 import { createHash } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
-import { z } from 'zod';
+
 
 import { ErrorCode } from '@eng-forge/contracts/api';
 import { Role } from '@eng-forge/contracts/enums';
 import { consentLog, parentChildren, user, userProfile } from '@eng-forge/db/schema';
+import { Inject, Injectable } from '@nestjs/common';
+import { z } from 'zod';
 
 import { BusinessError, notFoundError, rbacDeniedError } from '../../common/errors.business.js';
 import { DbConnection } from '../../infra/db/db.module.js';

@@ -18,8 +18,8 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { zodPipe } from '../../common/zod-validation.pipe.js';
 import { CurrentUser } from '../../infra/profile/current-user.decorator.js';
-import { Roles } from '../../infra/profile/rbac.guard.js';
 import { type ProfileScope } from '../../infra/profile/profile-scope.js';
+import { Roles } from '../../infra/profile/rbac.guard.js';
 
 import {
   type BindChildInput,

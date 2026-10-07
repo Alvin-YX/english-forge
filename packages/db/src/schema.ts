@@ -5,24 +5,15 @@
  * 表结构一致，仅约束语法略有差异。
  */
 
-import { sql } from 'drizzle-orm';
 import {
   index,
   integer,
   json,
   pgTable,
-  primaryKey,
   text,
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
-
-// ═══════════════════════════════════════════════════════════
-// 辅助类型
-// ═══════════════════════════════════════════════════════════
-
-/** JSON 列类型（PG jsonb） */
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 // ═══════════════════════════════════════════════════════════
 // Migrations version 表（迁移追踪）
