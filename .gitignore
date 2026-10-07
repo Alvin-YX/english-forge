@@ -49,3 +49,6 @@ _tmp_*
 
 # 运行时数据（词库导入产物、SQLite 测试库等）
 /data/
+
+# reinstall-deps.sh 重装依赖时的中间目录（内含 symlink，git 无法遍历）
+node_modules.old.*/
