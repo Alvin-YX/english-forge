@@ -440,8 +440,12 @@ describe('Gamification Module - 排行榜（跨用户）', () => {
     }
   });
 
-  it('GET /gamification/games/spell_truck/leaderboard → 200 空排行榜', async () => {
-    const { status, body } = await get('/gamification/games/spell_truck/leaderboard', tokenA);
+  it('GET /gamification/games/match4/leaderboard → 200 空排行榜', async () => {
+    // 🔴 用 match4 而不是 spell_truck：本文件前面「游戏记录」describe 里
+    //    已插了一条 spell_truck 记录，而 leaderboard 是**跨用户**查询，
+    //    那条记录也会出现在 spell_truck 的排行榜里。
+    //    match4 在整个 spec 里从未插入，才是真正「空」的候选。
+    const { status, body } = await get('/gamification/games/match4/leaderboard', tokenA);
     expect(status).toBe(200);
     expect(Array.isArray(body.data)).toBe(true);
     expect((body.data as unknown[]).length).toBe(0);

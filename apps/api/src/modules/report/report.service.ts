@@ -65,8 +65,12 @@ export const GET_WEEKLY_REPORT_SCHEMA = z.object({
 });
 
 export const GET_MONTHLY_REPORT_SCHEMA = z.object({
-  year: z.number().int().min(2020).max(2035),
-  month: z.number().int().min(1).max(12),
+  // 🔴 必须用 z.coerce.number()：query 参数经 HTTP 到达时永远是字符串，
+  //    裸 `z.number()` 会把 '2025' 拒为 400 VALIDATION_FAILED。
+  //    与 z.coerce.boolean 的 'false' → true 同宗，是 z.coerce.* 家族的
+  //    「非-coerce 变体在 query 参数上直接错」的第三例。
+  year: z.coerce.number().int().min(2020).max(2035),
+  month: z.coerce.number().int().min(1).max(12),
 });
 
 export const EXPORT_CSV_SCHEMA = z.object({

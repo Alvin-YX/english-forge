@@ -372,7 +372,7 @@ describe('Report Module - CSV 导出（含数据）', () => {
     const raw = (app.get(DbConnection).client as unknown as { raw: { exec: (sql: string) => unknown } }).raw;
     raw.exec(`
       INSERT INTO learning_record (user_id, kind, ref_type, is_correct, score, duration_ms, created_at)
-      VALUES (${userId}, 'reading', 'word', 1, '90.0', 5000, '2025-10-06T10:00:00Z');
+      VALUES (${userId}, 'spell', 'word', 1, '90.0', 5000, '2025-10-06T10:00:00Z');
     `);
     const { status, body } = await get('/report/export/csv?type=learning_records', token);
     expect(status).toBe(200);

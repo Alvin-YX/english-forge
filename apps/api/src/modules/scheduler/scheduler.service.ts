@@ -37,7 +37,11 @@ export interface NoticeView {
   link?: string;
   refType?: string;
   refId?: string;
-  readAt?: string;
+  // 🔴 与运行时对齐：listNotices() 用 `?? null` 保留「未读」这个状态键，
+  //    JSON.stringify 会输出 `"readAt": null` 而不是省略该字段。客户端据此
+  //    判定未读。所以类型必须是 `string | null`，`?`（undefined）会与实际
+  //    wire 格式不符（TS 端看不到的字段在 HTTP 响应里其实存在）。
+  readAt: string | null;
   createdAt: string;
 }
 
