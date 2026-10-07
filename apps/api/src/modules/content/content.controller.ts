@@ -42,21 +42,9 @@ export class ContentController {
     return this.service.listWords(query);
   }
 
-  /** 词条详情（公共） */
-  @Public()
-  @Get(':id')
-  @ApiOperation({ summary: '词条详情（公共）' })
-  getWord(@Param('id', zodPipe(POSITIVE_INT)) id: number): Promise<WordDetailView> {
-    return this.service.getWordById(id);
-  }
-
-  /** 某词条的例句（公共） */
-  @Public()
-  @Get(':id/examples')
-  @ApiOperation({ summary: '某词条的例句（公共）' })
-  getExamples(@Param('id', zodPipe(POSITIVE_INT)) id: number): Promise<SentenceView[]> {
-    return this.service.getWordExamples(id);
-  }
+  // 🔴 静态路由必须声明在 `:id` 之前。Nest/Fastify 按声明顺序匹配，
+  //    `sentences` / `units/:unitId` 若排在 `:id` 之后会被 `:id` 抢先命中，
+  //    导致 GET /words/sentences 走词条详情分支、参数校验失败返回 400。
 
   /** 例句列表（公共），支持分页 */
   @Public()
@@ -72,5 +60,21 @@ export class ContentController {
   @ApiOperation({ summary: '单元内的词条列表（公共）' })
   listWordsByUnit(@Param('unitId', zodPipe(POSITIVE_INT)) unitId: number): Promise<UnitWordView[]> {
     return this.service.listWordsByUnit(unitId);
+  }
+
+  /** 词条详情（公共）——🔴 通配 `:id` 必须排在上面所有静态路由之后 */
+  @Public()
+  @Get(':id')
+  @ApiOperation({ summary: '词条详情（公共）' })
+  getWord(@Param('id', zodPipe(POSITIVE_INT)) id: number): Promise<WordDetailView> {
+    return this.service.getWordById(id);
+  }
+
+  /** 某词条的例句（公共） */
+  @Public()
+  @Get(':id/examples')
+  @ApiOperation({ summary: '某词条的例句（公共）' })
+  getExamples(@Param('id', zodPipe(POSITIVE_INT)) id: number): Promise<SentenceView[]> {
+    return this.service.getWordExamples(id);
   }
 }

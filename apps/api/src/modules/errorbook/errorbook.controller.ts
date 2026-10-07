@@ -53,6 +53,44 @@ export class ErrorBookController {
     return this.service.listErrorBook(scope, query);
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // error_sample 原始样本
+  // 🔴 `samples*` 静态路由必须声明在 `:id` 通配之前，否则 GET /errorbook/samples
+  //    会被 `@Get(':id')` 抢先命中 → 参数校验失败返回 400。
+  // ═══════════════════════════════════════════════════════════
+
+  /** GET /errorbook/samples —— 错误样本列表 */
+  @Get('samples')
+  @ApiOperation({ summary: '错误样本列表（分页、分类/优先级/词条过滤）' })
+  async samples(
+    @CurrentUser() scope: ProfileScope,
+    @Query(zodPipe(LIST_ERRORSAMPLES_QUERY_SCHEMA)) query: ListErrorSamplesQuery,
+  ): Promise<{ items: ErrorSampleView[]; total: number; page: number; pageSize: number; totalPages: number }> {
+    return this.service.listErrorSamples(scope, query);
+  }
+
+  /** GET /errorbook/samples/:id —— 错误样本详情 */
+  @Get('samples/:id')
+  @ApiOperation({ summary: '错误样本详情' })
+  async sampleDetail(
+    @CurrentUser() scope: ProfileScope,
+    @Param('id', zodPipe(POSITIVE_INT)) id: number,
+  ): Promise<ErrorSampleView> {
+    return this.service.getErrorSampleById(scope, id);
+  }
+
+  /** POST /errorbook/samples/:id/replay —— 回放错误样本 */
+  @Post('samples/:id/replay')
+  @ApiOperation({ summary: '回放错误样本（更新 replay_count）' })
+  async replay(
+    @CurrentUser() scope: ProfileScope,
+    @Param('id', zodPipe(POSITIVE_INT)) id: number,
+  ): Promise<ErrorSampleView> {
+    return this.service.replayErrorSample(scope, id);
+  }
+
+  // ── 以下为通配 `:id` 路由，必须排在全部静态路由之后 ──────────
+
   /** GET /errorbook/:id —— 错题详情 */
   @Get(':id')
   @ApiOperation({ summary: '错题详情' })
@@ -91,40 +129,6 @@ export class ErrorBookController {
     @Param('id', zodPipe(POSITIVE_INT)) id: number,
   ): Promise<void> {
     return this.service.deleteErrorBook(scope, id);
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // error_sample 原始样本
-  // ═══════════════════════════════════════════════════════════
-
-  /** GET /errorbook/samples —— 错误样本列表 */
-  @Get('samples')
-  @ApiOperation({ summary: '错误样本列表（分页、分类/优先级/词条过滤）' })
-  async samples(
-    @CurrentUser() scope: ProfileScope,
-    @Query(zodPipe(LIST_ERRORSAMPLES_QUERY_SCHEMA)) query: ListErrorSamplesQuery,
-  ): Promise<{ items: ErrorSampleView[]; total: number; page: number; pageSize: number; totalPages: number }> {
-    return this.service.listErrorSamples(scope, query);
-  }
-
-  /** GET /errorbook/samples/:id —— 错误样本详情 */
-  @Get('samples/:id')
-  @ApiOperation({ summary: '错误样本详情' })
-  async sampleDetail(
-    @CurrentUser() scope: ProfileScope,
-    @Param('id', zodPipe(POSITIVE_INT)) id: number,
-  ): Promise<ErrorSampleView> {
-    return this.service.getErrorSampleById(scope, id);
-  }
-
-  /** POST /errorbook/samples/:id/replay —— 回放错误样本 */
-  @Post('samples/:id/replay')
-  @ApiOperation({ summary: '回放错误样本（更新 replay_count）' })
-  async replay(
-    @CurrentUser() scope: ProfileScope,
-    @Param('id', zodPipe(POSITIVE_INT)) id: number,
-  ): Promise<ErrorSampleView> {
-    return this.service.replayErrorSample(scope, id);
   }
 
   /** DELETE /errorbook/samples/:id —— 删除错误样本 */

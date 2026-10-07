@@ -36,9 +36,9 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
-import { notFoundError } from '../../common/errors.business.js';
+import { internalInvariantError, notFoundError } from '../../common/errors.business.js';
 import { DbConnection } from '../../infra/db/db.module.js';
-import { and, asc, count, desc, eq, gte, lte, sql } from '../../infra/db/query.js';
+import { asc, count, desc, eq, gte, lte, type PgUpdateSetSource, type SQL, sql } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
 
 // ═══════════════════════════════════════════════════════════
@@ -203,6 +203,18 @@ export type GetHeatmapQuery = z.infer<typeof GET_HEATMAP_QUERY_SCHEMA>;
 const PAGE_SIZE_DEFAULT = 20;
 const PAGE_SIZE_MAX = 100;
 
+/**
+ * `numeric(p,s)` 列在 Drizzle 的**写入侧**类型是 `string`
+ *（PG 用字符串传以避免浮点精度丢失），读取侧同样是 `string`。
+ *
+ * 🔴 不写 `as any` 绕过：读写两侧的转换必须成对出现，否则精度会在往返中漂移。
+ * 🔴 这里不做定点量化 —— 精度由列声明 `numeric(precision, scale)` 唯一裁定，
+ *    应用层再 `toFixed` 反而会造成二次舍入（如 `phoneme_error_rate` 是 scale=4）。
+ */
+function toNumeric(value: number | undefined): string | undefined {
+  return value === undefined ? undefined : String(value);
+}
+
 /** 今日 0 点（UTC+8） */
 function todayStart(): Date {
   const now = new Date();
@@ -232,7 +244,7 @@ export class LearningService {
     const page = query.page;
     const pageSize = Math.min(query.pageSize, PAGE_SIZE_MAX);
 
-    const conditions: ReturnType<typeof sql>[] = [];
+    const conditions: SQL[] = [];
 
     // 今日待复习（fsrs_next_review <= now）
     if (query.dueOnly) {
@@ -247,7 +259,7 @@ export class LearningService {
     const where = profileWhere(scope, wordMastery.userId, ...conditions);
 
     // 排序
-    let orderBy: any[];
+    let orderBy: SQL[];
     if (query.sortBy === 'lastPracticed') {
       orderBy = [desc(wordMastery.lastPracticedAt), desc(wordMastery.id)];
     } else if (query.sortBy === 'fsrsNextReview') {
@@ -363,49 +375,67 @@ export class LearningService {
     const existing = await this.getMasteryByWordId(scope, input.wordId);
 
     const now = new Date();
-    const updateFields: Record<string, unknown> = {
-      updatedAt: now,
-      lastPracticedAt: now,
-      totalAttempts: (existing?.totalAttempts ?? 0) + 1,
-    };
 
-    if (input.recognizeScore !== undefined) updateFields.recognizeScore = input.recognizeScore;
-    if (input.listenScore !== undefined) updateFields.listenScore = input.listenScore;
-    if (input.spellScore !== undefined) updateFields.spellScore = input.spellScore;
-    if (input.speakScore !== undefined) updateFields.speakScore = input.speakScore;
-    if (input.fsrsState !== undefined) updateFields.fsrsState = fsrsStateToDb(input.fsrsState);
-    if (input.fsrsStability !== undefined) updateFields.fsrsStability = input.fsrsStability;
-    if (input.fsrsDifficulty !== undefined) updateFields.fsrsDifficulty = input.fsrsDifficulty;
-    if (input.fsrsNextReview !== undefined) updateFields.fsrsNextReview = input.fsrsNextReview;
-    if (input.speakErrorCount !== undefined) updateFields.speakErrorCount = input.speakErrorCount;
-    if (input.spellErrorCount !== undefined) updateFields.spellErrorCount = input.spellErrorCount;
-    if (input.phonemeErrorRate !== undefined) updateFields.phonemeErrorRate = input.phonemeErrorRate;
-
-    // 重新计算 overallScore
+    // 🔴 五维分数先算出来（insert / update 两条路径共用），numeric 列写入侧是 string
     const rs: number = input.recognizeScore ?? existing?.recognizeScore ?? 0;
     const ls: number = input.listenScore ?? existing?.listenScore ?? 0;
     const ss: number = input.spellScore ?? existing?.spellScore ?? 0;
     const sk: number = input.speakScore ?? existing?.speakScore ?? 0;
     // 加权综合：认读 0.3 + 听辨 0.25 + 拼写 0.25 + 口语 0.2
-    updateFields.overallScore = Math.round((rs * 0.3 + ls * 0.25 + ss * 0.25 + sk * 0.2) * 100) / 100;
+    const scores = {
+      recognizeScore: toNumeric(rs),
+      listenScore: toNumeric(ls),
+      spellScore: toNumeric(ss),
+      speakScore: toNumeric(sk),
+      overallScore: toNumeric(Math.round((rs * 0.3 + ls * 0.25 + ss * 0.25 + sk * 0.2) * 100) / 100),
+    };
+
+    /** 可选列：undefined 表示「本次不更新」，不能落null（null 会清掉旧值） */
+    const patch: PgUpdateSetSource<typeof wordMastery> = {
+      ...scores,
+      updatedAt: now,
+      lastPracticedAt: now,
+      totalAttempts: (existing?.totalAttempts ?? 0) + 1,
+    };
+
+    if (input.fsrsState !== undefined) patch.fsrsState = fsrsStateToDb(input.fsrsState);
+    if (input.fsrsStability !== undefined) patch.fsrsStability = input.fsrsStability;
+    if (input.fsrsDifficulty !== undefined) patch.fsrsDifficulty = input.fsrsDifficulty;
+    if (input.fsrsNextReview !== undefined) patch.fsrsNextReview = input.fsrsNextReview;
+    if (input.speakErrorCount !== undefined) patch.speakErrorCount = input.speakErrorCount;
+    if (input.spellErrorCount !== undefined) patch.spellErrorCount = input.spellErrorCount;
+    if (input.phonemeErrorRate !== undefined) patch.phonemeErrorRate = toNumeric(input.phonemeErrorRate);
 
     if (existing) {
       await this.conn.db
         .update(wordMastery)
-        .set(updateFields as any)
+        .set(patch)
         .where(profileWhere(scope, wordMastery.userId, eq(wordMastery.wordId, input.wordId)));
     } else {
       await this.conn.db.insert(wordMastery).values({
         userId: scope.profileId,
         wordId: input.wordId,
-        ...updateFields,
+        ...scores,
+        lastPracticedAt: now,
+        totalAttempts: 1,
+        // 🔴 phonemeErrorRate 是 notNull + default，缺省交给 DB 默认值，不要显式传 null
+        ...(input.phonemeErrorRate === undefined
+          ? {}
+          : { phonemeErrorRate: toNumeric(input.phonemeErrorRate) }),
+        speakErrorCount: input.speakErrorCount ?? 0,
+        spellErrorCount: input.spellErrorCount ?? 0,
         fsrsState: fsrsStateToDb(input.fsrsState ?? FsrsState.NEW),
         fsrsStability: input.fsrsStability ?? 0.3,
         fsrsDifficulty: input.fsrsDifficulty ?? 5.0,
-      } as any);
+      });
     }
 
-    return this.getMasteryByWordId(scope, input.wordId)!;
+    // 刚 upsert 过必定存在；查不到说明 profileWhere 过滤掉了刚写入的行，属不变量破坏
+    const saved = await this.getMasteryByWordId(scope, input.wordId);
+    if (saved === null) {
+      throw internalInvariantError('掌握度写入后读取失败');
+    }
+    return saved;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -414,8 +444,6 @@ export class LearningService {
 
   /** 创建学习记录 */
   async createLearningRecord(scope: ProfileScope, input: CreateLearningRecordInput): Promise<LearningRecordView> {
-    const now = new Date();
-
     const result = await this.conn.db
       .insert(learningRecord)
       .values({
@@ -425,11 +453,12 @@ export class LearningService {
         refId: input.refId,
         courseId: input.courseId,
         isCorrect: input.isCorrect,
-        score: input.score,
-        accuracy: input.accuracy,
-        fluency: input.fluency,
-        completeness: input.completeness,
-        prosody: input.prosody,
+        // 🔴 numeric 列写入侧是 string（见 toNumeric 注释）
+        score: toNumeric(input.score),
+        accuracy: toNumeric(input.accuracy),
+        fluency: toNumeric(input.fluency),
+        completeness: toNumeric(input.completeness),
+        prosody: toNumeric(input.prosody),
         durationMs: input.durationMs,
         answerText: input.answerText,
         confidenceLevel: input.confidenceLevel,
@@ -441,6 +470,11 @@ export class LearningService {
       .returning();
 
     const row = result[0];
+    // 🔴 `INSERT ... RETURNING` 走主键 upsert 语义必然回一行；
+    //    空数组说明 DB 层被 truncate/规则拦截，属不变量破坏，必须显式失败而非返回半成品视图。
+    if (row === undefined) {
+      throw internalInvariantError('学习记录写入后未返回任何行');
+    }
     return {
       id: row.id,
       kind: row.kind,
@@ -469,7 +503,7 @@ export class LearningService {
     const page = query.page;
     const pageSize = Math.min(query.pageSize, PAGE_SIZE_MAX);
 
-    const conditions: ReturnType<typeof sql>[] = [];
+    const conditions: SQL[] = [];
     if (query.kind) {
       conditions.push(eq(learningRecord.kind, query.kind));
     }
@@ -589,9 +623,11 @@ export class LearningService {
   async getHeatmap(scope: ProfileScope, query: GetHeatmapQuery): Promise<HeatmapEntry[]> {
     const weeks = Math.min(query.weeks, 52);
     const now = new Date();
-    // 往前推 weeks 周
-    const startDate = new Date(now.getTime() - weeks * 7 * 24 * 3600 * 1000);
-    const endDate = new Date(now.getTime() + 24 * 3600 * 1000); // 含今天
+    // 区间为「含今天的 weeks×7 天」：向前推weeks×7−1 天，
+    // 再加上今天，正好 weeks×7 天。原先用 now+1天 作上界，
+    // 而下方补齐循环是闭区间（d <= endDate），会多产出 1 天。
+    const startDate = new Date(now.getTime() - (weeks * 7 - 1) * 24 * 3600 * 1000);
+    const endDate = now;
 
     const rows = await this.conn.db
       .select({

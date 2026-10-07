@@ -19,9 +19,9 @@
  */
 
 import { ErrorCode } from '@eng-forge/contracts/api';
-import { ErrorCategory } from '@eng-forge/contracts/enums';
 import {
   RESOLVE_RIGHT_STREAK,
+  type ErrorBookCategory,
   errorBook,
   errorSample,
 } from '@eng-forge/db/schema';
@@ -30,7 +30,7 @@ import { z } from 'zod';
 
 import { notFoundError } from '../../common/errors.business.js';
 import { DbConnection } from '../../infra/db/db.module.js';
-import { and, asc, count, desc, eq, isNull, sql } from '../../infra/db/query.js';
+import { count, desc, eq, type SQL, sql } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
 
 // ═══════════════════════════════════════════════════════════
@@ -40,7 +40,15 @@ import { profileWhere, type ProfileScope } from '../../infra/profile/profile-sco
 /** 错题本条目视图 */
 export interface ErrorBookView {
   id: number;
-  category: ErrorCategory;
+  /**
+   * 🔴 用 db 层的 `ErrorBookCategory`（speak/spell/grammar/listen/reading），
+   *    **不是** contracts 的 `ErrorCategory`（只有前三类）。
+   *    原因见 `packages/db/src/schema/errorbook.ts` §4.2.9：
+   *    DB 列的 CHECK 取并集以免 listen/reading 类错题写不进去，
+   *    本模块的 `LIST_ERRORBOOK_QUERY_SCHEMA` 也按五类开放。
+   *    若这里写 contracts 的窄类型，列表接口在遇到 listen/reading 行时会被迫瞎断言。
+   */
+  category: ErrorBookCategory;
   wordId?: number;
   sentenceId?: number;
   message?: string;
@@ -82,7 +90,9 @@ export const LIST_ERRORBOOK_QUERY_SCHEMA = z.object({
   pageSize: z.coerce.number().int().positive().max(100).optional().default(20),
   category: z.enum(['speak', 'spell', 'grammar', 'listen', 'reading']).optional(),
   resolved: z.coerce.boolean().optional(),
-  favorite: z.coerce.boolean().optional().default(false),
+  // 🔴 过滤条件不能带默认值：不传 favorite 应表示「不按收藏过滤」，
+  //    而 `.default(false)` 会让列表只剩未收藏项（实测 3 条里少 1 条）。
+  favorite: z.coerce.boolean().optional(),
   sortBy: z.enum(['wrongCount', 'lastError', 'createdAt']).optional().default('lastError'),
 });
 
@@ -134,7 +144,7 @@ export class ErrorBookService {
     const page = query.page;
     const pageSize = Math.min(query.pageSize, PAGE_SIZE_MAX);
 
-    const conditions: ReturnType<typeof sql>[] = [];
+    const conditions: SQL[] = [];
 
     // 分类过滤
     if (query.category) {
@@ -154,7 +164,7 @@ export class ErrorBookService {
     const where = profileWhere(scope, errorBook.userId, ...conditions);
 
     // 排序
-    let orderBy: any[];
+    let orderBy: SQL[];
     if (query.sortBy === 'wrongCount') {
       orderBy = [desc(errorBook.wrongCount), desc(errorBook.id)];
     } else if (query.sortBy === 'createdAt') {
@@ -294,7 +304,7 @@ export class ErrorBookService {
     const page = query.page;
     const pageSize = Math.min(query.pageSize, PAGE_SIZE_MAX);
 
-    const conditions:ReturnType<typeof sql>[] = [];
+    const conditions:SQL[] = [];
 
     // 分类过滤
     if (query.category) {
