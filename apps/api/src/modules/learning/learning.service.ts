@@ -21,7 +21,7 @@
  */
 
 import { ErrorCode } from '@eng-forge/contracts/api';
-import { ConfidenceLevel, RecordKind, ScoreDegradeLevel } from '@eng-forge/contracts/enums';
+import { type ConfidenceLevel, type RecordKind, type ScoreDegradeLevel } from '@eng-forge/contracts/enums';
 import { FsrsState } from '@eng-forge/contracts/types';
 import {
   dailyStat,
@@ -36,10 +36,10 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
-import { internalInvariantError, notFoundError } from '../../common/errors.business.js';
 import { boolQuery } from '../../common/bool-query.js';
+import { internalInvariantError, notFoundError } from '../../common/errors.business.js';
 import { DbConnection } from '../../infra/db/db.module.js';
-import { asc, count, desc, eq, gte, lte, type PgUpdateSetSource, type SQL, sql } from '../../infra/db/query.js';
+import { asc, count, desc, eq, gte, lte, type PgUpdateSetSource, type SQL } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
 
 // ═══════════════════════════════════════════════════════════
@@ -203,7 +203,6 @@ export type GetHeatmapQuery = z.infer<typeof GET_HEATMAP_QUERY_SCHEMA>;
 // 常量
 // ═══════════════════════════════════════════════════════════
 
-const PAGE_SIZE_DEFAULT = 20;
 const PAGE_SIZE_MAX = 100;
 
 /**
@@ -222,12 +221,6 @@ function toNumeric(value: number | undefined): string | undefined {
 function todayStart(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0));
-}
-
-/** 今日结束（明天 0 点） */
-function todayEnd(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -563,7 +556,6 @@ export class LearningService {
   /** 今日概览：今日统计 + 待复习数 */
   async getTodayOverview(scope: ProfileScope): Promise<TodayOverview> {
     const tStart = todayStart();
-    const tEnd = todayEnd();
 
     // 今日日统计
     const [dailyRow] = await this.conn.db

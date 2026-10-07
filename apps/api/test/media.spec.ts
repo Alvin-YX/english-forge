@@ -1,6 +1,5 @@
 import type { Server } from 'node:http';
 
-import { type ApiResponse, ErrorCode } from '@eng-forge/contracts/api';
 import { NestFactory, type NestApplication } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -11,7 +10,6 @@ import { MediaService } from '../src/modules/media/media.service.js';
 import { createTestDb, setupTestEnv } from './helpers/test-env.js';
 
 let app: NestApplication;
-let baseUrl = '';
 let cleanup: (() => void) | undefined;
 let mediaService: MediaService;
 
@@ -27,7 +25,6 @@ beforeAll(async () => {
   if (address === null || typeof address === 'string') {
     throw new Error('测试服务未能绑定端口');
   }
-  baseUrl = `http://127.0.0.1:${address.port}/api/v1`;
   mediaService = app.get(MediaService);
 });
 

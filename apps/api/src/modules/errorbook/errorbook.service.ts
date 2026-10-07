@@ -28,10 +28,10 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
-import { notFoundError } from '../../common/errors.business.js';
 import { boolQuery } from '../../common/bool-query.js';
+import { notFoundError } from '../../common/errors.business.js';
 import { DbConnection } from '../../infra/db/db.module.js';
-import { count, desc, eq, type SQL, sql } from '../../infra/db/query.js';
+import { count, desc, eq, type SQL } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
 
 // ═══════════════════════════════════════════════════════════
@@ -128,7 +128,6 @@ export type ListErrorSamplesQuery = z.infer<typeof LIST_ERRORSAMPLES_QUERY_SCHEM
 // 常量
 // ═══════════════════════════════════════════════════════════
 
-const PAGE_SIZE_DEFAULT = 20;
 const PAGE_SIZE_MAX = 100;
 
 // ═══════════════════════════════════════════════════════════

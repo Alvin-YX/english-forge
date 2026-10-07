@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AppModule } from '../src/app.module.js';
 import { parseEnv } from '../src/infra/config/env.js';
+
 import { createTestDb, setupTestEnv } from './helpers/test-env.js';
 
 let app: NestApplication;
@@ -439,7 +440,7 @@ describe('Conversation Module - 跨档案隔离', () => {
   });
 
   it('A 不能看到 B 的对话列表', async () => {
-    const { status, body } = await get('/conversations', tokenA);
+    const { status: _status, body } = await get('/conversations', tokenA);
     const data = body.data as { items: { id: number }[]; total: number };
     expect(data.total).toBe(1);
     data.items.forEach((item) => expect(item.id).toBe(convIdA));

@@ -70,10 +70,8 @@ async function post(
 describe('REQ-011 跨档案隔离（核心安全测试）', () => {
   let userAId: number;
   let userAProfileId: number;
-  let userBId: number;
   let userBProfileId: number;
   let adminId: number;
-  let adminProfileId: number;
   let validAToken: string;
 
   beforeAll(async () => {
@@ -104,7 +102,6 @@ describe('REQ-011 跨档案隔离（核心安全测试）', () => {
     const validBToken = bodyB.data.accessToken;
     const meB = await get('/me', validBToken);
     const dataB = meB.body.data as { userId: number };
-    userBId = dataB.userId;
     userBProfileId = dataB.userId;
 
     // Register Admin
@@ -119,7 +116,6 @@ describe('REQ-011 跨档案隔离（核心安全测试）', () => {
     const meAdmin = await get('/me', validAdminToken);
     const dataAdmin = meAdmin.body.data as { userId: number };
     adminId = dataAdmin.userId;
-    adminProfileId = dataAdmin.userId;
 
     // Verify profiles are distinct
     expect(userAProfileId).not.toBe(userBProfileId);
@@ -162,14 +158,12 @@ describe('REQ-011 跨档案隔离（核心安全测试）', () => {
 
   it('#4: Admin token 携带他人 profileId → 403（RBAC 不覆盖档案隔离）', async () => {
     // 🔴 Admin 角色也不能越权访问他人的档案数据
-    const resAdmin = await post('/auth/register', {
+    const _resAdmin = await post('/auth/register', {
       username: 'isolation_admin2',
       password: 'password123',
       displayName: 'Admin 2',
       role: Role.ADMIN,
     });
-    const bodyAdmin = resAdmin.body as { data: { accessToken: string } };
-    const adminToken = bodyAdmin.data.accessToken;
 
     // Forge admin token with user B's profileId
     const forgedAdminToken = sign({

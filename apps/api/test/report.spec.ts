@@ -5,8 +5,9 @@ import { NestFactory, type NestApplication } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AppModule } from '../src/app.module.js';
-import { DbConnection } from '../src/infra/db/db.module.js';
 import { parseEnv } from '../src/infra/config/env.js';
+import { DbConnection } from '../src/infra/db/db.module.js';
+
 import { createTestDb, setupTestEnv } from './helpers/test-env.js';
 
 let app: NestApplication;
@@ -247,11 +248,9 @@ describe('Report Module - 月报告', () => {
 
 describe('Report Module - CSV 导出', () => {
   let token: string;
-  let userId: number;
 
   beforeAll(async () => {
     token = await registerAndGetToken('report_csv_user', 'password123', 'Report CSV User');
-    userId = await getUserId(token);
   });
 
   it('GET /report/export/csv?type=learning_records → 200 CSV 字符串', async () => {

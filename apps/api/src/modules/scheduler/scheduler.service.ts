@@ -10,10 +10,10 @@ import { jobAudit, systemNotice } from '@eng-forge/db/schema';
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
-import { notFoundError } from '../../common/errors.business.js';
 import { boolQuery } from '../../common/bool-query.js';
+import { notFoundError } from '../../common/errors.business.js';
 import { DbConnection } from '../../infra/db/db.module.js';
-import { asc, count, desc, eq, sql } from '../../infra/db/query.js';
+import { count, desc, eq, sql } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
 
 export interface JobAuditView {
@@ -92,6 +92,7 @@ export class SchedulerService {
     const countRows = await this.conn.db
       .select({ total: count() })
       .from(jobAudit)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .where(where as any)
       .limit(1);
     const total = countRows[0]?.total ?? 0;
@@ -100,6 +101,7 @@ export class SchedulerService {
     const rows = await this.conn.db
       .select()
       .from(jobAudit)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .where(where as any)
       .orderBy(desc(jobAudit.createdAt))
       .limit(pageSize)

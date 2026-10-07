@@ -13,15 +13,15 @@
  *    （depcruise 规则 `profile-scope-chokepoint`）。
  */
 
-import { sentence, sentenceUnit, word, wordUnit } from '@eng-forge/db/schema';
+import { ErrorCode } from '@eng-forge/contracts/api';
+import { sentence, word, wordUnit } from '@eng-forge/db/schema';
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
-import { ErrorCode } from '@eng-forge/contracts/api';
 
 import { notFoundError } from '../../common/errors.business.js';
 import { DbConnection } from '../../infra/db/db.module.js';
-import { and, asc, count, desc, eq, ilike, or, sql } from '../../infra/db/query.js';
+import { and, asc, count, desc, eq, ilike, or, type sql } from '../../infra/db/query.js';
 
 // ═══════════════════════════════════════════════════════════
 // View 类型（API 边界形状，不含内部列 embedding / searchTsv 等）
@@ -102,7 +102,6 @@ export type GetSentencesQuery = z.infer<typeof GET_SENTENCES_QUERY_SCHEMA>;
 // 常量
 // ═══════════════════════════════════════════════════════════
 
-const PAGE_SIZE_DEFAULT = 20;
 const PAGE_SIZE_MAX = 100;
 
 // ═══════════════════════════════════════════════════════════
@@ -158,6 +157,7 @@ export class ContentService {
     const where = and(...conditions);
 
     // 排序
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let orderBy: any[];
     if (query.sortBy === 'frequency') {
       orderBy = [asc(word.frequencyRank), asc(word.headword)];

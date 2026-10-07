@@ -27,7 +27,7 @@ import { z } from 'zod';
 
 import { notFoundError } from '../../common/errors.business.js';
 import { DbConnection } from '../../infra/db/db.module.js';
-import { count, desc, eq, gte, lte, sql } from '../../infra/db/query.js';
+import { count, desc, eq, gte, lte, type sql } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
 
 // ═══════════════════════════════════════════════════════════
@@ -124,7 +124,6 @@ export type ListGamesQuery = z.infer<typeof LIST_GAMES_QUERY_SCHEMA>;
 // 常量
 // ═══════════════════════════════════════════════════════════
 
-const PAGE_SIZE_DEFAULT = 20;
 const PAGE_SIZE_MAX = 100;
 
 /** 本周周一日期（UTC，YYYY-MM-DD） */
@@ -249,6 +248,7 @@ export class GamificationService {
         currentValue: 0,
         rewardPoints: input.rewardPoints,
         status: 'ongoing',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
       .returning();
 
@@ -382,6 +382,7 @@ export class GamificationService {
         accuracy: input.accuracy,
         durationMs: input.durationMs,
         wrongWords: input.wrongWords,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
       .returning();
 
@@ -419,6 +420,7 @@ export class GamificationService {
     const where = profileWhere(scope, gameRecord.userId, ...conditions);
 
     // 排序
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let orderBy: any[];
     if (query.sortBy === 'score') {
       orderBy = [desc(gameRecord.score), desc(gameRecord.id)];

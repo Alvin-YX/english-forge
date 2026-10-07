@@ -5,8 +5,8 @@ import { NestFactory, type NestApplication } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AppModule } from '../src/app.module.js';
-import { DbConnection } from '../src/infra/db/db.module.js';
 import { parseEnv } from '../src/infra/config/env.js';
+import { DbConnection } from '../src/infra/db/db.module.js';
 
 import { at } from './helpers/assert.js';
 import { createTestDb, setupTestEnv } from './helpers/test-env.js';
@@ -165,11 +165,9 @@ describe('Scheduler Module - 作业审计', () => {
 
 describe('Scheduler Module - 系统通知', () => {
   let token: string;
-  let userId: number;
 
   beforeAll(async () => {
     token = await registerAndGetToken('sched_notices_user', 'password123', 'Sched Notices User');
-    userId = await getUserId(token);
   });
 
   it('GET /scheduler/notices 新用户 → 200 空列表', async () => {

@@ -2,13 +2,12 @@
  * Report service - Weekly/Monthly report + CSV export
  */
 
-import { ErrorCode } from '@eng-forge/contracts/api';
-import { dailyStat, heatmap, learningRecord, wordMastery, streak } from '@eng-forge/db/schema';
+import { dailyStat, learningRecord, wordMastery, streak } from '@eng-forge/db/schema';
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
 import { DbConnection } from '../../infra/db/db.module.js';
-import { asc, count, desc, eq, gte, lte, sql } from '../../infra/db/query.js';
+import { asc, desc, gte, lte, type sql } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
 
 export interface DailyBreakdownView {
