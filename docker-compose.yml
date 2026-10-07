@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   nginx:
+    image: englishforge/nginx:1.0.0
     build:
       context: .
       dockerfile: apps/web/Dockerfile
@@ -16,6 +17,7 @@ services:
       - forge-net
 
   api:
+    image: englishforge/api:1.0.0
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -41,6 +43,7 @@ services:
       - forge-net
 
   speech:
+    image: englishforge/speech:1.0.0
     build:
       context: .
       dockerfile: apps/speech/Dockerfile
@@ -49,6 +52,7 @@ services:
       - forge-net
 
   ai:
+    image: englishforge/ai:1.0.0
     build:
       context: .
       dockerfile: apps/ai/Dockerfile
