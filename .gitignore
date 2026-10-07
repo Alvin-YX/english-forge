@@ -43,3 +43,9 @@ pnpm-debug.log*
 
 # NFS workarounds
 _tmp_*
+
+# 构建/测试工具产生的临时文件（vite、vitest 每次运行都会生成）
+*.timestamp-*.mjs
+
+# 运行时数据（词库导入产物、SQLite 测试库等）
+/data/

@@ -115,6 +115,18 @@ export default [
     },
   },
 
+  // ── Service Worker（WebWorker 全局作用域）──────────────────
+  // SW 由 vite-plugin-pwa 单独打包，运行在 Worker 全局作用域而非 Window，
+  // 故需要 serviceworker 全局（ServiceWorkerGlobalScope / ExtendableEvent / FetchEvent …）。
+  {
+    files: ['**/service-worker.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.serviceworker,
+      },
+    },
+  },
+
   // ── 测试文件放宽 ──────────────────────────────────────────
   {
     files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/tests/**'],
