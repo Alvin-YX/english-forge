@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module.js';
 import { DbConnection } from '../src/infra/db/db.module.js';
 import { parseEnv } from '../src/infra/config/env.js';
 
+import { at } from './helpers/assert.js';
 import { createTestDb, setupTestEnv } from './helpers/test-env.js';
 
 let app: NestApplication;
@@ -98,7 +99,7 @@ describe('Content Module - 词条列表 GET /words', () => {
     expect(body.code).toBe(ErrorCode.OK);
     const data = body.data as { items: { headword: string }[]; total: number };
     expect(data.total).toBe(1);
-    expect(data.items[0].headword).toBe('apple');
+    expect(at(data.items, 0, 'words').headword).toBe('apple');
   });
 
   it('search 按 translationZh 中文搜索', async () => {
@@ -107,7 +108,7 @@ describe('Content Module - 词条列表 GET /words', () => {
     expect(body.code).toBe(ErrorCode.OK);
     const data = body.data as { items: { headword: string }[]; total: number };
     expect(data.total).toBe(1);
-    expect(data.items[0].headword).toBe('apple');
+    expect(at(data.items, 0, 'words').headword).toBe('apple');
   });
 
   it('search 无匹配 → 空结果', async () => {
@@ -125,7 +126,7 @@ describe('Content Module - 词条列表 GET /words', () => {
     expect(body.code).toBe(ErrorCode.OK);
     const data = body.data as { items: { pos: string }[]; total: number };
     expect(data.total).toBe(1);
-    expect(data.items[0].pos).toBe('v');
+    expect(at(data.items, 0, 'words?pos=v').pos).toBe('v');
   });
 
   it('cefrLevel 过滤 CEFR 等级', async () => {
@@ -160,8 +161,8 @@ describe('Content Module - 词条列表 GET /words', () => {
     expect(status).toBe(200);
     expect(body.code).toBe(ErrorCode.OK);
     const data = body.data as { items: { headword: string }[] };
-    expect(data.items[0].headword).toBe('apple');
-    expect(data.items[4].headword).toBe('the');
+    expect(at(data.items, 0, 'words').headword).toBe('apple');
+    expect(at(data.items, 4, 'words?sortBy=alphabetical').headword).toBe('the');
   });
 
   it('sortBy=frequency 按词频排序', async () => {
@@ -169,8 +170,8 @@ describe('Content Module - 词条列表 GET /words', () => {
     expect(status).toBe(200);
     expect(body.code).toBe(ErrorCode.OK);
     const data = body.data as { items: { headword: string }[] };
-    expect(data.items[0].headword).toBe('the');
-    expect(data.items[4].headword).toBe('happy');
+    expect(at(data.items, 0, 'words?sortBy=alphabetical').headword).toBe('the');
+    expect(at(data.items, 4, 'words?sortBy=frequency').headword).toBe('happy');
   });
 
   it('sortBy=updatedAt 返回 200', async () => {
@@ -214,7 +215,7 @@ describe('Content Module - 词条例句 GET /words/:id/examples', () => {
     expect(Array.isArray(body.data)).toBe(true);
     const data = body.data as { id: number; text: string }[];
     expect(data.length).toBe(1);
-    expect(data[0].text).toBe('I like apples.');
+    expect(at(data, 0, 'words/1/examples').text).toBe('I like apples.');
   });
 
   it('有效 id 但无匹配例句 → 200 + 空数组', async () => {
@@ -241,8 +242,8 @@ describe('Content Module - 例句列表 GET /words/sentences', () => {
     const data = body.data as { items: { text: string; sourceKind: string }[]; total: number };
     expect(data.total).toBe(1);
     expect(data.items.length).toBe(1);
-    expect(data.items[0].text).toBe('I like apples.');
-    expect(data.items[0].sourceKind).toBe('course');
+    expect(at(data.items, 0, 'word sentences').text).toBe('I like apples.');
+    expect(at(data.items, 0, 'word sentences').sourceKind).toBe('course');
   });
 
   it('分页参数生效', async () => {
@@ -265,9 +266,9 @@ describe('Content Module - 单元词条 GET /words/units/:unitId', () => {
     expect(Array.isArray(body.data)).toBe(true);
     const data = body.data as { headword: string; sortOrder: number; isRequired: boolean }[];
     expect(data.length).toBe(3);
-    expect(data[0].headword).toBe('apple');
-    expect(data[0].sortOrder).toBe(1);
-    expect(data[0].isRequired).toBe(true);
+    expect(at(data, 0, 'words/units/1').headword).toBe('apple');
+    expect(at(data, 0, 'words/units/1').sortOrder).toBe(1);
+    expect(at(data, 0, 'words/units/1').isRequired).toBe(true);
   });
 
   it('不存在的 unitId → 200 + 空数组', async () => {
@@ -306,7 +307,7 @@ describe('Content Module - @Public 无需鉴权', () => {
         role: 'student',
       }),
     });
-    const data = await res.json();
+    const data = (await res.json()) as ApiResponse<{ accessToken: string }>;
     const token = data.data.accessToken;
     const { status } = await get('/words', token);
     expect(status).toBe(200);

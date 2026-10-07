@@ -36,6 +36,19 @@ export function notFoundError(code: ErrorCodeValue, message: string): BusinessEr
   return new BusinessError(code, message, 404);
 }
 
+/**
+ * 服务端不变量被破坏（如 `INSERT ... RETURNING` 回了空数组）。
+ *
+ * 🔴 刻意与 `notFoundError` 区分：这类错误**不是**「用户请求的资源不存在」，
+ *    而是「代码/数据状态违反了本不该违反的约定」，用 404 会把基础设施故障
+ *    伪装成正常业务分支，导致排障时走错方向。
+ *    code 走 `UNKNOWN_ERROR` 是刻意的 —— 5xx 一律不向前端暴露内部细节，
+ *    详见 `http-exception.filter.ts` §5xx 处理。
+ */
+export function internalInvariantError(message: string): BusinessError {
+  return new BusinessError(ErrorCode.UNKNOWN_ERROR, message, 500);
+}
+
 /** 未认证（缺 token / 凭证形态不合法） */
 export function unauthenticatedError(message = '请先登录'): BusinessError {
   return new BusinessError(ErrorCode.UNAUTHENTICATED, message, 401);

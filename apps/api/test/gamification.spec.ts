@@ -7,6 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { DbConnection } from '../src/infra/db/db.module.js';
 import { parseEnv } from '../src/infra/config/env.js';
+
+import { at } from './helpers/assert.js';
 import { createTestDb, setupTestEnv } from './helpers/test-env.js';
 
 let app: NestApplication;
@@ -159,7 +161,7 @@ describe('Gamification Module - 徽章', () => {
     expect(status).toBe(200);
     const data = body.data as { code: string }[];
     expect(data.length).toBe(1);
-    expect(data[0].code).toBe('streak_7');
+    expect(at(data, 0, 'gamification/badges').code).toBe('streak_7');
   });
 
   it('授予第二个不同徽章', async () => {
@@ -200,7 +202,7 @@ describe('Gamification Module - 每周挑战', () => {
     );
     expect(status).toBe(201);
     expect(body.code).toBe(ErrorCode.OK);
-    const data = body.data as { id: number; title: string; metric: string; targetValue: number; status: string };
+    const data = body.data as { id: number; title: string; metric: string; targetValue: number; currentValue: number; status: string };
     challengeId = data.id;
     expect(data.title).toBe('Weekly Challenge');
     expect(data.metric).toBe('study_minutes');
@@ -369,7 +371,9 @@ describe('Gamification Module - 游戏记录', () => {
     const { status, body } = await get('/gamification/games?sortBy=score', token);
     expect(status).toBe(200);
     const data = body.data as { items: { score: number }[] };
-    expect(data.items[0].score).toBeGreaterThanOrEqual(data.items[data.items.length - 1].score);
+    const first = at(data.items, 0, 'games?sortBy=score');
+    const last = at(data.items, data.items.length - 1, 'games?sortBy=score');
+    expect(first.score).toBeGreaterThanOrEqual(last.score);
   });
 
   it('GET /gamification/games?page=1&pageSize=2 → 分页', async () => {
@@ -424,8 +428,8 @@ describe('Gamification Module - 排行榜（跨用户）', () => {
     expect(status).toBe(200);
     const data = body.data as { rank: number; score: number; comboMax: number }[];
     expect(data.length).toBeGreaterThanOrEqual(3);
-    expect(data[0].rank).toBe(1);
-    expect(data[0].score).toBeGreaterThanOrEqual(data[1].score);
+    expect(at(data, 0, 'games leaderboard').rank).toBe(1);
+    expect(at(data, 0, 'games leaderboard').score).toBeGreaterThanOrEqual(at(data, 1, 'games leaderboard').score);
   });
 
   it('GET /gamification/games/word_shooter/leaderboard 按分数降序', async () => {

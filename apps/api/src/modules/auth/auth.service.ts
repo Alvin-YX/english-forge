@@ -9,12 +9,13 @@
  * 🔴 登录失败不泄露具体原因（用户名不存在 vs 密码错误返回同一错误码）。
  */
 
+import { randomUUID } from 'node:crypto';
+
 import { ErrorCode } from '@eng-forge/contracts/api';
 import { Role } from '@eng-forge/contracts/enums';
 import { user, userProfile, type UserRow } from '@eng-forge/db/schema';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type JwtService } from '@nestjs/jwt';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import { BusinessError } from '../../common/errors.business.js';
@@ -222,12 +223,15 @@ export class AuthService {
   /**
    * 签发 access + refresh 双 token。
    *
-   * 🔴 `jti` 用 `randomUUID()` 保证每次签发唯一，
-   *    未来做 token 撤销表时可直接用 jti 关联。
+   * 🔴 选项名必须是 `jwtid` 而不是 `jti`：`jsonwebtoken` v9 的 `SignOptions`
+   *    只认 `jwtid`（`options_to_payload` 映射表把 `jwtid` → payload 的 `jti` claim）。
+   *    传 `jti` 会被 schema 校验直接抛 `"jti" is not allowed in "options"`，
+   *    登录接口 500。写出的 claim 名仍是标准 `jti`（RFC 7519 §4.1.7），下游读法不变。
+   *
+   * 🔴 access / refresh 各给一个独立 jti：二者共享同一个 jti 会让未来的
+   *    token 撤销表无法区分「撤销哪个」，一条access 被拉黑会连带 refresh 一起失效。
    */
   private async issueTokens(user: UserRow): Promise<AuthTokens> {
-    const jti = randomUUID();
-
     const payload: JwtProfilePayload = {
       sub: user.id,
       profileId: user.id,
@@ -235,8 +239,8 @@ export class AuthService {
     };
 
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtAccess.signAsync(payload, { jti }),
-      this.jwtRefresh.signAsync(payload, { jti }),
+      this.jwtAccess.signAsync(payload, { jwtid: randomUUID() }),
+      this.jwtRefresh.signAsync(payload, { jwtid: randomUUID() }),
     ]);
 
     return {

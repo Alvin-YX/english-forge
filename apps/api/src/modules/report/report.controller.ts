@@ -4,7 +4,6 @@
 
 import { Controller, Get, Inject, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { z } from 'zod';
 
 import { zodPipe } from '../../common/zod-validation.pipe.js';
 import { CurrentUser } from '../../infra/profile/current-user.decorator.js';
@@ -12,6 +11,7 @@ import { type ProfileScope } from '../../infra/profile/profile-scope.js';
 
 import {
   type CsvExportView,
+  type ExportCsvInput,
   type GetMonthlyReportInput,
   type GetWeeklyReportInput,
   type MonthlyReportView,
@@ -49,7 +49,7 @@ export class ReportController {
   @ApiOperation({ summary: 'CSV 导出' })
   async exportCsv(
     @CurrentUser() scope: ProfileScope,
-    @Query(zodPipe(EXPORT_CSV_SCHEMA)) query: GetWeeklyReportInput,
+    @Query(zodPipe(EXPORT_CSV_SCHEMA)) query: ExportCsvInput,
   ): Promise<CsvExportView> {
     return this.service.exportCsv(scope, query);
   }

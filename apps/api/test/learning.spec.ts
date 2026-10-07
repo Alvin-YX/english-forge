@@ -9,6 +9,7 @@ import { AppModule } from '../src/app.module.js';
 import { DbConnection } from '../src/infra/db/db.module.js';
 import { parseEnv } from '../src/infra/config/env.js';
 
+import { at } from './helpers/assert.js';
 import { createTestDb, setupTestEnv } from './helpers/test-env.js';
 
 let app: NestApplication;
@@ -264,7 +265,7 @@ describe('Learning Module - learning_record', () => {
     expect(body.code).toBe(ErrorCode.OK);
     const data = body.data as { items: { kind: string }[]; total: number };
     expect(data.total).toBe(1);
-    expect(data.items[0].kind).toBe('spell');
+    expect(at(data.items, 0, 'learning/records?kind=spell').kind).toBe('spell');
   });
 
   it('GET /learning/records 分页生效', async () => {
@@ -342,9 +343,9 @@ describe('Learning Module - today/streak/heatmap', () => {
     expect(Array.isArray(body.data)).toBe(true);
     const data = body.data as { date: string; level: number; minutes: number; count: number }[];
     expect(data.length).toBeGreaterThan(0);
-    expect(data[0].level).toBe(0);
-    expect(data[0].minutes).toBe(0);
-    expect(data[0].count).toBe(0);
+    expect(at(data, 0, 'learning/heatmap').level).toBe(0);
+    expect(at(data, 0, 'learning/heatmap').minutes).toBe(0);
+    expect(at(data, 0, 'learning/heatmap').count).toBe(0);
   });
 
   it('GET /learning/heatmap?weeks=4 → 自定义周数', async () => {

@@ -7,6 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { DbConnection } from '../src/infra/db/db.module.js';
 import { parseEnv } from '../src/infra/config/env.js';
+
+import { at } from './helpers/assert.js';
 import { createTestDb, setupTestEnv } from './helpers/test-env.js';
 
 let app: NestApplication;
@@ -40,9 +42,15 @@ async function get(path: string, token?: string): Promise<{ status: number; body
   return { status: res.status, body: (await res.json()) as ApiResponse<unknown> };
 }
 
+/**
+ * 🔴 `body` 声明为可选：通知的「标记已读」类端点本就没有请求体，
+ *    函数体内部也已按 `body === undefined` 分支处理（不发 content-type、不带 body）。
+ *    之前写成必填参数，导致 `patch('/scheduler/notices/1/read')` 这类
+ *    语义完全正确的调用编译不过（TS2554）。
+ */
 async function patch(
   path: string,
-  body: unknown,
+  body?: unknown,
   token?: string,
 ): Promise<{ status: number; body: ApiResponse<unknown> }> {
   const headers: Record<string, string> = {};
@@ -374,7 +382,7 @@ describe('Scheduler Module - 跨档案隔离', () => {
   it('B 不能标记 A 的通知已读（404）', async () => {
     const { body: listBody } = await get('/scheduler/notices', tokenA);
     const data = listBody.data as { items: { id: number }[] };
-    const noticeId = data.items[0].id;
+    const noticeId = at(data.items, 0, 'scheduler/notices (tokenA)').id;
     const { status, body } = await patch(`/scheduler/notices/${noticeId}/read`, undefined, tokenB);
     expect(status).toBe(404);
     expect(body.code).toBe(ErrorCode.RESOURCE_NOT_FOUND);

@@ -30,9 +30,9 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
-import { notFoundError } from '../../common/errors.business.js';
+import { internalInvariantError, notFoundError } from '../../common/errors.business.js';
 import { DbConnection } from '../../infra/db/db.module.js';
-import { and, asc, count, desc, eq, sql } from '../../infra/db/query.js';
+import { and, asc, count, desc, eq, type SQL, sql } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
 
 // ═══════════════════════════════════════════════════════════
@@ -81,8 +81,13 @@ export interface MessageView {
 
 const POSITIVE_INT = z.coerce.number().int().positive();
 
+/**
+ * 🔴 这些枚举在 `packages/db` 里声明为 `as const` 数组（而非 TS `enum`），
+ *    因此必须用 `z.enum()`；`z.nativeEnum()` 只接受「对象形态」的枚举，
+ *    对 readonly 数组会直接报 TS2345。
+ */
 export const CREATE_CONVERSATION_SCHEMA = z.object({
-  mode: z.nativeEnum(CONVERSATION_MODES),
+  mode: z.enum(CONVERSATION_MODES),
   persona: z.string().max(32).optional().default('tutor'),
   scenarioId: z.string().max(64).optional(),
   level: z.string().max(16),
@@ -91,21 +96,21 @@ export const CREATE_CONVERSATION_SCHEMA = z.object({
 export const LIST_CONVERSATIONS_QUERY_SCHEMA = z.object({
   page: POSITIVE_INT.optional().default(1),
   pageSize: z.coerce.number().int().positive().max(100).optional().default(20),
-  mode: z.nativeEnum(CONVERSATION_MODES).optional(),
-  status: z.nativeEnum(CONVERSATION_STATUSES).optional(),
+  mode: z.enum(CONVERSATION_MODES).optional(),
+  status: z.enum(CONVERSATION_STATUSES).optional(),
   sortBy: z.enum(['startedAt', 'turnCount']).optional().default('startedAt'),
   sortDir: z.enum(['asc', 'desc']).optional().default('desc'),
 });
 
 export const SEND_MESSAGE_SCHEMA = z.object({
-  role: z.nativeEnum(MESSAGE_ROLES),
+  role: z.enum(MESSAGE_ROLES),
   content: z.string().max(2000),
-  inputType: z.nativeEnum(MESSAGE_INPUT_TYPES).optional().default('text'),
+  inputType: z.enum(MESSAGE_INPUT_TYPES).optional().default('text'),
   recordingId: POSITIVE_INT.optional(),
   asrText: z.string().max(2000).optional(),
   translationZh: z.string().max(2000).optional(),
   correctionJson: z.unknown().optional(),
-  provider: z.nativeEnum(AI_PROVIDERS).optional(),
+  provider: z.enum(AI_PROVIDERS).optional(),
   tokens: z.number().int().min(0).optional(),
   latencyMs: z.number().int().min(0).optional(),
   filtered: z.boolean().optional().default(false),
@@ -234,6 +239,10 @@ export class ConversationService {
       .returning();
 
     const row = result[0];
+    // 🔴 同learning.service：`INSERT ... RETURNING` 必然回一行，空数组属不变量破坏
+    if (row === undefined) {
+      throw internalInvariantError('对话创建后未返回任何行');
+    }
     return this.toConversationView(row);
   }
 
@@ -256,7 +265,7 @@ export class ConversationService {
     // 排序
     const dir = query.sortDir;
     const sortField = query.sortBy === 'turnCount' ? aiConversation.turnCount : aiConversation.startedAt;
-    const orderBy = [
+    const orderBy: SQL[] = [
       dir === 'asc' ? asc(sortField) : desc(sortField),
       desc(aiConversation.id),
     ];
@@ -275,7 +284,7 @@ export class ConversationService {
       .select()
       .from(aiConversation)
       .where(where)
-      .orderBy(...(orderBy as any[]))
+      .orderBy(...orderBy)
       .limit(pageSize)
       .offset((page - 1) * pageSize);
 
@@ -323,7 +332,7 @@ export class ConversationService {
       .set({
         status: 'finished',
         endedAt: now,
-      } as any)
+      })
       .where(
         profileWhere(
           scope,
@@ -402,8 +411,11 @@ export class ConversationService {
     await this.assertConversationOwned(scope, conversationId);
 
     // 获取当前最大 seq
+    // 🔴 sql`` 的返回类型是 unknown，必须用泛型参数声明真实类型（这里是 integer），
+    //    否则下游的算术运算会退化成 {} + number。
+    //    MAX() 在无行时返回 null，用 COALESCE 兜成 0 避免 null 参与算术。
     const [maxRow] = await this.conn.db
-      .select({ max: sql`MAX(${aiMessage.seq})` })
+      .select({ max: sql<number>`COALESCE(MAX(${aiMessage.seq}), 0)` })
       .from(aiMessage)
       .where(eq(aiMessage.conversationId, conversationId))
       .limit(1);
@@ -426,10 +438,13 @@ export class ConversationService {
         tokens: input.tokens,
         latencyMs: input.latencyMs,
         filtered: input.filtered,
-      } as any)
+      })
       .returning();
 
     const row = result[0];
+    if (row === undefined) {
+      throw internalInvariantError('消息写入后未返回任何行');
+    }
 
     // 更新会话计数器
     if (input.role === 'user') {

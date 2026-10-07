@@ -139,7 +139,7 @@ describe('Conversation Module - 对话 CRUD', () => {
     );
     expect(status).toBe(201);
     expect(body.code).toBe(ErrorCode.OK);
-    const data = body.data as { id: number; mode: string; level: string; status: string; turnCount: number };
+    const data = body.data as { id: number; mode: string; level: string; status: string; turnCount: number; startedAt: string };
     convId = data.id;
     expect(data.mode).toBe('chat');
     expect(data.level).toBe('A1');

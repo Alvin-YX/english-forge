@@ -46,6 +46,9 @@ export class AuthController {
    */
   @Public()
   @Post('login')
+  // 🔴 登录不创建资源，NestJS 的 POST 默认 201 是给「注册」用的；
+  //    与同为凭证换取的 `refresh` 保持一致返回 200。
+  @HttpCode(200)
   @ApiOperation({ summary: '用户登录' })
   async login(
     @Body(zodPipe(LOGIN_SCHEMA)) body: LoginInput,
