@@ -8,7 +8,7 @@
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 
-import type { Dialect } from './dialect.js';
+import { setActiveDialect, type Dialect } from './dialect.js';
 import * as schema from './schema/index.js';
 import type { DbConnectionConfig } from './types.js';
 
@@ -32,6 +32,10 @@ export interface PgClient {
  *    （`pnpm -r test` 会挂住）。
  */
 export function createPgClient(config: DbConnectionConfig): PgClient {
+  // 🔴 与 SQLite 档对称：在此登记方言，保证 `boolColumn` 的值映射按PG 档透传
+  //    （本工厂可能被测试/脚本直接调用，绕过 `createDb`）。
+  setActiveDialect('postgres');
+
   const pool = new Pool({
     connectionString: config.url,
     max: config.maxConnections > 0 ? config.maxConnections : PG_POOL_MAX,

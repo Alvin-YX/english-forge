@@ -10,10 +10,8 @@
  */
 
 import { type FrequencyBand } from '@eng-forge/contracts/enums';
-import { sql } from 'drizzle-orm';
 import {
   bigint,
-  boolean,
   index,
   integer,
   json,
@@ -27,6 +25,8 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
+
+import { boolColumn, jsonDefaultSql, textArrayDefaultSql } from '../dialect.js';
 
 
 import { unit } from './taxonomy.js';
@@ -90,15 +90,15 @@ export const word = pgTable(
     /** 词频分级（超高/高/中/低，精华特性 #9）—— 🔶 03 文档未落列，按 contracts 补齐 */
     frequencyBand: varchar('frequency_band', { length: 8 }).$type<FrequencyBand>(),
     /** [PG] {zk,gk,cet4,...}；SQLite 存 JSON 数组字符串（dialect.ts textArray） */
-    examTags: text('exam_tags').array().default(sql`'{}'::varchar[]`),
+    examTags: text('exam_tags').array().default(textArrayDefaultSql()),
     /** 教材/自备音频（可空） */
     audioUkPath: varchar('audio_uk_path', { length: 255 }),
     audioUsPath: varchar('audio_us_path', { length: 255 }),
     cefrLevel: varchar('cefr_level', { length: 2 }).$type<CefrLevel>(),
     /** 默写判分是否需变形 */
-    isVerb: boolean('is_verb').notNull().default(false),
+    isVerb: boolColumn('is_verb').notNull().default(false),
     /** {past:'went',pp:'gone',plural:'geese'} */
-    irregularForms: json('irregular_forms').notNull().default(sql`'{}'::json`),
+    irregularForms: json('irregular_forms').notNull().default(jsonDefaultSql()),
     /** [PG] 可选，LLM 出题去重用（默认 NULL）；SQLite 存 BLOB */
     embedding: real('embedding').array(),
     source: varchar('source', { length: 32 }).$type<WordSource>().notNull().default('builtin'),
@@ -109,7 +109,7 @@ export const word = pgTable(
     /** 原始来源 URL / 文件出处，便于追溯与下架 */
     sourceUrl: varchar('source_url', { length: 255 }),
 
-    isActive: boolean('is_active').notNull().default(true),
+    isActive: boolColumn('is_active').notNull().default(true),
     /** [PG] FTS：headword + translation_zh + definition_en；SQLite 走 word_fts 虚拟表 */
     searchTsv: text('search_tsv'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -145,7 +145,7 @@ export const wordUnit = pgTable(
       .references(() => word.id, { onDelete: 'cascade' }),
     sortOrder: smallint('sort_order').notNull(),
     /** 必学/选学 */
-    isRequired: boolean('is_required').notNull().default(true),
+    isRequired: boolColumn('is_required').notNull().default(true),
   },
   (t) => [
     uniqueIndex('uq_word_unit_unit_word').on(t.unitId, t.wordId),

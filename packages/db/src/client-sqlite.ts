@@ -16,8 +16,7 @@ import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-import type { Dialect } from './dialect.js';
-import { SQLITE_NOW_UDF_NAME } from './dialect.js';
+import { setActiveDialect, SQLITE_NOW_UDF_NAME, type Dialect } from './dialect.js';
 import * as schema from './schema/index.js';
 import type { DbConnectionConfig } from './types.js';
 
@@ -64,6 +63,10 @@ export function createSqliteClient(
 ): SqliteClient {
   const isMemory = options.inMemory === true;
   const filename = isMemory ? ':memory:' : resolveSqlitePath(config.url);
+
+  // 🔴 必须在这里（而非只在 `createDb`）登记方言：`boolColumn` 的值映射靠它分岔，
+  //    而本工厂也可能被测试/脚本直接调用，绕过 `createDb`。
+  setActiveDialect('sqlite');
 
   if (!isMemory) {
     // 确保 data 目录存在，否则 better-sqlite3 会以「unable to open database」失败

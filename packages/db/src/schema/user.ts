@@ -13,10 +13,8 @@
 
 import { type Accent, type Role } from '@eng-forge/contracts/enums';
 import { type StageCode } from '@eng-forge/contracts/types';
-import { sql } from 'drizzle-orm';
 import {
   bigint,
-  boolean,
   index,
   json,
   numeric,
@@ -26,6 +24,8 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
+
+import { boolColumn, jsonDefaultSql } from '../dialect.js';
 
 
 /** 账号状态（§4.2.1 CHECK 约束） */
@@ -113,11 +113,11 @@ export const userProfile = pgTable('user_profile', {
     .notNull()
     .default('weekly'),
   /** 其他偏好（[PG] JSON / SQLite TEXT，见 dialect.ts JsonCol 约定） */
-  extra: json('extra').notNull().default(sql`'{}'::json`),
+  extra: json('extra').notNull().default(jsonDefaultSql()),
 
   // ── 04 文档 §5.6.1 规则①「首次使用前 1 句校准」────────────────
   /** 是否已完成首次使用前的 1 句环境校准（测底噪 + 设备质量 → 判定性能档位） */
-  calibrationDone: boolean('calibration_done').notNull().default(false),
+  calibrationDone: boolColumn('calibration_done').notNull().default(false),
   /** 校准测得的环境底噪 dB */
   noiseFloorDb: numeric('noise_floor_db', { precision: 5, scale: 2 }),
 
@@ -207,7 +207,7 @@ export const consentLog = pgTable(
     /** 协议正文 + 版本的 SHA-256（hex 64） */
     agreementHash: varchar('agreement_hash', { length: 64 }).notNull(),
     /** 是否同意 */
-    granted: boolean('granted').notNull(),
+    granted: boolColumn('granted').notNull(),
     /** 同意/拒绝发生时间 */
     grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
     /** 撤回时间（null = 未撤回） */

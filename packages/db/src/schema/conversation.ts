@@ -11,7 +11,6 @@
 
 import {
   bigint,
-  boolean,
   index,
   integer,
   json,
@@ -22,6 +21,8 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
+
+import { boolColumn } from '../dialect.js';
 
 import { recording } from './speech.js';
 import { user } from './user.js';
@@ -62,7 +63,7 @@ export const aiConversation = pgTable(
     /** 实际生效者 */
     providerUsed: varchar('provider_used', { length: 16 }).$type<AiProvider>(),
     /** 是否发生降级 */
-    fallbackUsed: boolean('fallback_used').notNull().default(false),
+    fallbackUsed: boolColumn('fallback_used').notNull().default(false),
     turnCount: smallint('turn_count').notNull().default(0),
     totalTokens: integer('total_tokens').notNull().default(0),
     /** 会话摘要（EngAgent 借鉴） */
@@ -128,7 +129,7 @@ export const aiMessage = pgTable(
     tokens: integer('tokens'),
     latencyMs: integer('latency_ms'),
     /** 安全过滤命中（04 文档 §9.2 内容安全） */
-    filtered: boolean('filtered').notNull().default(false),
+    filtered: boolColumn('filtered').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

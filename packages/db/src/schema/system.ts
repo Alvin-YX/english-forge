@@ -14,7 +14,6 @@ import { type Role } from '@eng-forge/contracts/enums';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
-  boolean,
   index,
   integer,
   json,
@@ -28,7 +27,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 
-import { IDEMPOTENCY_TTL_MS, byteaColumn } from '../dialect.js';
+import { IDEMPOTENCY_TTL_MS, byteaColumn, boolColumn } from '../dialect.js';
 
 import { user } from './user.js';
 
@@ -92,8 +91,8 @@ export const permissionMatrix = pgTable(
     role: varchar('role', { length: 16 }).$type<Role>().notNull(),
     /** 见 `seed/permissions.ts` 的 `PERMISSION_FEATURES`（11 项） */
     feature: varchar('feature', { length: 64 }).notNull(),
-    canRead: boolean('can_read').notNull().default(false),
-    canWrite: boolean('can_write').notNull().default(false),
+    canRead: boolColumn('can_read').notNull().default(false),
+    canWrite: boolColumn('can_write').notNull().default(false),
   },
   (t) => [primaryKey({ columns: [t.role, t.feature] })],
 );
@@ -202,7 +201,7 @@ export const appConfig = pgTable('app_config', {
   group: varchar('group', { length: 32 }).notNull().default('general'),
   description: varchar('description', { length: 255 }),
   /** 🔶 是否可在管理后台修改（出网白名单等安全项建议 false，只改文件/env） */
-  editable: boolean('editable').notNull().default(true),
+  editable: boolColumn('editable').notNull().default(true),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -352,7 +351,7 @@ export const idempotencyKey = pgTable(
     /** 首次成功响应体（重放时原样返回） */
     responseJson: json('response_json'),
     /** 处理中标记：并发同 key 请求据此返回 409 而非重复执行 */
-    inProgress: boolean('in_progress').notNull().default(false),
+    inProgress: boolColumn('in_progress').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     /** created_at + 24h */
     expireAt: timestamp('expire_at', { withTimezone: true }).notNull(),

@@ -13,6 +13,7 @@
  * —— NAS 离线环境需要**手写可审计 SQL 迁移**（§4.4 阶段 B 明确要求人工 review）。
  */
 
+import { sql, type SQL } from 'drizzle-orm';
 import { customType } from 'drizzle-orm/pg-core';
 
 // ═══════════════════════════════════════════════════════════
@@ -150,6 +151,78 @@ export const TYPE_MAPPING: Record<LogicalType, Record<Dialect, string>> = {
 export function ddlType(logical: LogicalType, dialect: Dialect): string {
   return TYPE_MAPPING[logical][dialect];
 }
+
+// ═══════════════════════════════════════════════════════════
+// 布尔列（§4.4 类型映射表 `boolean` 行的 Drizzle 侧落地）
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * 🔴 本进程要连的方言。
+ *
+ * 为什么需要它：schema 的列构造器（`boolColumn('is_active')`）在**模块加载时**执行，
+ * 那时拿不到连接配置；而值的映射（`true` ↔ `1`）又必须按方言分岔。
+ * 故由 `createDb()` 在建连时把判档结果写进这个模块级变量，
+ * 列的 `toDriver`/`fromDriver` 闭包在**每次读写时**读它。
+ *
+ * 默认取`DEFAULT_DIALECT`（postgres）：本变量只在列的读写路径上被读，
+ * 而任何读写都必须先经`createDb()`，故默认值实际是「不可达的安全兜底」。
+ */
+let activeDialect: Dialect = DEFAULT_DIALECT;
+
+/** 由 `createDb()` 调用，登记本进程实际使用的方言 */
+export function setActiveDialect(dialect: Dialect): void {
+  activeDialect = dialect;
+}
+
+/** 当前生效的方言（供列映射闭包与诊断使用） */
+export function getActiveDialect(): Dialect {
+  return activeDialect;
+}
+
+/**
+ * 双方言布尔列 —— `TYPE_MAPPING.boolean` 在 Drizzle 列层的实现。
+ *
+ * 🔴 为什么不能直接用 `pg-core` 的 `boolean()`：
+ *    `PgBoolean` **没有** `mapToDriverValue`，JS的 `true` 会原样交给驱动。
+ *    PG 驱动接受 `true`，但 better-sqlite3 只接受
+ *    number/string/bigint/Buffer/null → `TypeError: SQLite3 can only bind ...`。
+ *    这就是 `eq(word.isActive, true)` 让**全部** `/words*` 端点 500 的根因。
+ *
+ * 做法：借`customType` 承载方言相关的值映射，对齐 `TYPE_MAPPING.boolean`
+ * （PG `BOOLEAN` / SQLite `INTEGER`）：
+ * - `dataType()` 恒为 `'boolean'` → PG 侧 DDL 与 pg 驱动行为**完全不变**，
+ *   `migrations/0000_init.sql` 里的 `BOOLEAN` 期望不受影响。
+ * - `toDriver`：SQLite 档 `true→1 / false→0`；PG 档原样透传。
+ * - `fromDriver`：SQLite 档 `1→true / 0→false`；PG 档原样透传。
+ *
+ * 效果：业务层继续写 `eq(t.isActive, true)`、继续拿到真 JS 布尔，
+ * **12 个 service 层零改动**；且任一方言下`typeof` 都是 `'boolean'`。
+ *
+ * 与 Drizzle 内置 `sqlite-core` 的 `integer({mode:'boolean'})` 等价，
+ * 但本helper 走`pg-core` customType，故能留在 `pgTable()` 里
+ * —— 改`sqliteTable` 会让 PG 主档失去pg 专属类型（serial/timestamptz/数组/FTS）。
+ *
+ * ⚠️ 迁移 SQL 里的 `is_active INTEGER NOT NULL DEFAULT 1` 由手写脚本保证
+ *    （见 `migrations-sqlite/0000_init.sql`），与本列的 `INTEGER` 落库形态一致。
+ */
+export const boolColumn = customType<{ data: boolean; driverData: boolean | number }>({
+  dataType() {
+    return TYPE_MAPPING.boolean.postgres;
+  },
+  toDriver(value) {
+    return isSqlite(activeDialect) ? (value ? 1 : 0) : value;
+  },
+  fromDriver(value) {
+    return isSqlite(activeDialect) ? Number(value) === 1 : Boolean(value);
+  },
+});
+
+/**
+ * 方言无关的 `boolean` 列构造器 —— schema 文件的**唯一**布尔列入口。
+ *
+ * 用法：写 `boolColumn('is_active')`，**不要**写 pg-core 的 `boolean('is_active')`
+ * （后者没有 `mapToDriverValue`，在 SQLite 档会把 `true` 原样丢给驱动而抛错）。
+ */
 
 // ═══════════════════════════════════════════════════════════
 // 能力开关（业务层用这些代替方言分支）
@@ -328,6 +401,57 @@ export function jsonStringArray(value: readonly string[] | null | undefined): st
 export function parseJsonStringArray(raw: string | null | undefined): string[] {
   const parsed = jsonParse<unknown>(raw, []);
   return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+}
+
+/**
+ * 把一段 JSON 文本包成 SQL 字符串字面量。
+ *
+ * 🔴 为什么必须用 `sql.raw` 而不是 `sql\`'${text}'\`：
+ *    Drizzle 的 `sql` 模板把**插入的 JS 字符串当作绑定参数**，
+ *    于是 ``sql`'${text}'` `` 会渲染成 `'?'` —— 占位符被单引号包住，
+ *    参数个数与`?` 个数对不上，better-sqlite3 报
+ *    `Too many parameter values were provided`（PG侧则是类型推断失败）。
+ *    JSON 文本在 DDL 里只能是字面量，故这里显式转义后raw 输出。
+ *
+ * 转义规则：单引号翻倍（SQL 标准 `'it''s'`），与 SQLite / PG 一致。
+ */
+function sqlStringLiteral(text: string): SQL {
+  return sql.raw(`'${text.replace(/'/g, "''")}'`);
+}
+
+/**
+ * `json` 列的**方言无关默认值** SQL 片段。
+ *
+ * 🔴 为什么不能直接写 `.default(sql\`'{}'::json\`)`：
+ *    `::json` 是 PG 的类型转换语法。当 Drizzle 把该默认值内联进
+ *    INSERT 语句（业务层未显式给该列时）时，SQLite 解析器遇到 `::`
+ *    直接报 `unrecognized token: ":"`。
+ *    SQLite 侧该列本就是 `TEXT`（TYPE_MAPPING.json.sqlite），
+ *    裸字符串字面量即可，无需也不能带类型转换。
+ *
+ * 两边都接受裸字面量：PG 会把 `'{}'` 隐式转成 `json`，
+ * 与迁移脚本 `migrations/0000_init.sql` 里的 `DEFAULT '{}'` 语义一致。
+ *
+ * @param value JSON 文本内容，默认 `'{}'`（空对象）
+ */
+export function jsonDefaultSql(value = '{}'): SQL {
+  return sqlStringLiteral(value);
+}
+
+/**
+ * `text[]`（`exam_tags`）的方言无关默认值 SQL 片段。
+ *
+ * 同 `jsonDefaultSql`：`::varchar[]` 是 PG 语法，内联进 INSERT 会让
+ * SQLite 报 `unrecognized token: ":"`。
+ *
+ * ⚠️ PG 侧原本是 `'{}'::varchar[]`（空数组），但 SQLite 侧迁移脚本的
+ *    默认值是 `'[]'`（JSON 数组字符串，见 TYPE_MAPPING.textArray
+ *    与 `migrations-sqlite/0000_init.sql`）。若沿用 `'{}'`，
+ *    `parseJsonStringArray()` 会因`Array.isArray({})===false`
+ *    静默退化成 `[]`，形成难以察觉的数据丢失。故统一为 `'[]'`。
+ */
+export function textArrayDefaultSql(): SQL {
+  return sqlStringLiteral('[]');
 }
 
 // ═══════════════════════════════════════════════════════════

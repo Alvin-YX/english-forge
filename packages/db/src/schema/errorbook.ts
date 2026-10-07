@@ -28,7 +28,6 @@ import { type ErrorCategory } from '@eng-forge/contracts/enums';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
-  boolean,
   index,
   integer,
   json,
@@ -38,6 +37,8 @@ import {
   timestamp,
   varchar,
 } from 'drizzle-orm/pg-core';
+
+import { boolColumn } from '../dialect.js';
 
 
 import { word, sentence } from './content.js';
@@ -83,9 +84,9 @@ export const errorBook = pgTable(
     wrongCount: integer('wrong_count').notNull().default(1),
     /** 连续答对次数（≥3 出清） */
     rightStreak: integer('right_streak').notNull().default(0),
-    isResolved: boolean('is_resolved').notNull().default(false),
+    isResolved: boolColumn('is_resolved').notNull().default(false),
     /** 收藏（对应 echoic 收藏） */
-    isFavorite: boolean('is_favorite').notNull().default(false),
+    isFavorite: boolColumn('is_favorite').notNull().default(false),
     /** 出错音素（speak 类） */
     phonemeJson: json('phoneme_json'),
     lastErrorAt: timestamp('last_error_at', { withTimezone: true }).notNull().defaultNow(),
@@ -151,7 +152,7 @@ export const errorSample = pgTable(
     lastReplayAt: timestamp('last_replay_at', { withTimezone: true }),
     /** 到期待删 */
     purgeAt: timestamp('purge_at', { withTimezone: true }),
-    isPurged: boolean('is_purged').notNull().default(false),
+    isPurged: boolColumn('is_purged').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

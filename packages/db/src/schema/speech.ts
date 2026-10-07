@@ -14,7 +14,6 @@ import { RecordingStatus } from '@eng-forge/contracts/types';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
-  boolean,
   index,
   integer,
   json,
@@ -26,6 +25,8 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
+
+import { boolColumn, jsonDefaultSql } from '../dialect.js';
 
 
 import { word } from './content.js';
@@ -102,9 +103,9 @@ export const recording = pgTable(
     /** 保留到期时间（speech 错误样本 7 天 / 普通录音 30 天，contracts `Recording`） */
     retainUntil: timestamp('retain_until', { withTimezone: true }),
     /** 是否为错误样本（错误样本 7 天，普通 30 天） */
-    isErrorSample: boolean('is_error_sample').notNull().default(false),
+    isErrorSample: boolColumn('is_error_sample').notNull().default(false),
     /** 软删，GC 任务处理 */
-    isDeleted: boolean('is_deleted').notNull().default(false),
+    isDeleted: boolColumn('is_deleted').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -180,7 +181,7 @@ export const pronunciationScore = pgTable(
     /** 权重快照 {acoustic,per,wer} —— 调权重不影响历史数据 */
     weightJson: json('weight_json')
       .notNull()
-      .default(sql`'{"acoustic":0.3,"per":0.4,"wer":0.3}'::json`),
+      .default(jsonDefaultSql('{"acoustic":0.3,"per":0.4,"wer":0.3}')),
 
     /** whisper:base-int8+w2v2-lv60+espeak-ng1.51 */
     engine: varchar('engine', { length: 64 }).notNull(),
@@ -189,7 +190,7 @@ export const pronunciationScore = pgTable(
     /** 整体置信度 0~1（低于门限不给总分） */
     confidence: numeric('confidence', { precision: 5, scale: 4 }),
     /** 同一录音重复评分 */
-    isCached: boolean('is_cached').notNull().default(false),
+    isCached: boolColumn('is_cached').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -235,9 +236,9 @@ export const phoneScore = pgTable(
     wordScore: numeric('word_score', { precision: 5, scale: 2 }).notNull(),
     charStart: integer('char_start'),
     charEnd: integer('char_end'),
-    isSubstitution: boolean('is_substitution').notNull().default(false),
-    isDeletion: boolean('is_deletion').notNull().default(false),
-    isInsertion: boolean('is_insertion').notNull().default(false),
+    isSubstitution: boolColumn('is_substitution').notNull().default(false),
+    isDeletion: boolColumn('is_deletion').notNull().default(false),
+    isInsertion: boolColumn('is_insertion').notNull().default(false),
     /** [{i,expected,actual,op,conf,start,end,type}] */
     phonesJson: json('phones_json').notNull(),
     wordAcousticDistance: numeric('word_acoustic_distance', { precision: 5, scale: 2 }),

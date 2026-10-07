@@ -14,7 +14,6 @@ import { type FsrsState } from '@eng-forge/contracts/types';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
-  boolean,
   date,
   index,
   integer,
@@ -28,6 +27,8 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
+
+import { boolColumn, jsonDefaultSql } from '../dialect.js';
 
 
 import { word } from './content.js';
@@ -78,7 +79,7 @@ export const wordMastery = pgTable(
     fsrsReps: integer('fsrs_reps').notNull().default(0),
     fsrsLapses: integer('fsrs_lapses').notNull().default(0),
     /** 连续 8 次失败 → 干预（leech） */
-    isLeech: boolean('is_leech').notNull().default(false),
+    isLeech: boolColumn('is_leech').notNull().default(false),
 
     // ── 错误累计 ───────────────────────────────────────────
     speakErrorCount: integer('speak_error_count').notNull().default(0),
@@ -148,7 +149,7 @@ export const course = pgTable(
     yamlHash: varchar('yaml_hash', { length: 64 }).notNull(),
     /** 编译后技能树（缓存） */
     compiledJson: json('compiled_json').notNull(),
-    isOfficial: boolean('is_official').notNull().default(false),
+    isOfficial: boolColumn('is_official').notNull().default(false),
     /** 🔴 课程包许可（04 文档 §9.3） */
     license: varchar('license', { length: 64 }).notNull(),
     createdBy: bigint('created_by', { mode: 'number' }).references(() => user.id, {
@@ -174,7 +175,7 @@ export const courseSkill = pgTable(
     skillId: varchar('skill_id', { length: 64 }).notNull(),
     moduleId: varchar('module_id', { length: 64 }).notNull(),
     /** 前置技能 DAG */
-    prereqJson: json('prereq_json').notNull().default(sql`'[]'::json`),
+    prereqJson: json('prereq_json').notNull().default(jsonDefaultSql('[]')),
     type: varchar('type', { length: 24 }).$type<CourseType>().notNull(),
     sortOrder: integer('sort_order').notNull(),
     /** 题面/选项/答案（LLM 动态生成则落此） */
@@ -218,7 +219,7 @@ export const lessonBlock = pgTable(
       .$type<BlockGenerator>()
       .notNull()
       .default('rule'),
-    consumed: boolean('consumed').notNull().default(false),
+    consumed: boolColumn('consumed').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -273,7 +274,7 @@ export const learningRecord = pgTable(
 
     // ── 判定结果 ───────────────────────────────────────────
     /** 客观题 */
-    isCorrect: boolean('is_correct'),
+    isCorrect: boolColumn('is_correct'),
     /** 主观题 0~100 */
     score: numeric('score', { precision: 5, scale: 2 }),
     accuracy: numeric('accuracy', { precision: 5, scale: 2 }),
@@ -344,7 +345,7 @@ export const dailyStat = pgTable(
     avgScore: numeric('avg_score', { precision: 5, scale: 2 }).notNull().default('0'),
     correctRate: numeric('correct_rate', { precision: 5, scale: 2 }).notNull().default('0'),
     errorCount: integer('error_count').notNull().default(0),
-    goalMet: boolean('goal_met').notNull().default(false),
+    goalMet: boolColumn('goal_met').notNull().default(false),
   },
   (t) => [
     index('idx_daily_stat_date').on(t.statDate),

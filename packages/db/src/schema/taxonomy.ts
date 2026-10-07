@@ -12,7 +12,6 @@
 import { type StageCode } from '@eng-forge/contracts/types';
 import {
   bigint,
-  boolean,
   index,
   pgTable,
   smallint,
@@ -20,6 +19,8 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
+
+import { boolColumn } from '../dialect.js';
 
 
 import { user } from './user.js';
@@ -45,7 +46,7 @@ export const stage = pgTable('stage', {
   nameEn: varchar('name_en', { length: 32 }).notNull(),
   sortOrder: smallint('sort_order').notNull(),
   /** 🔶 MVP 是否实现（04 文档 §8.2 负向清单：仅小学 3-6 与初中为 true） */
-  enabledInMvp: boolean('enabled_in_mvp').notNull().default(false),
+  enabledInMvp: boolColumn('enabled_in_mvp').notNull().default(false),
   /** 建议起始年龄（04 文档 §4.7 规则6：年龄下限 6 岁） */
   minAge: smallint('min_age'),
   maxAge: smallint('max_age'),
@@ -71,12 +72,12 @@ export const textbook = pgTable(
     region: varchar('region', { length: 32 }).notNull().default('CN'),
     publisher: varchar('publisher', { length: 64 }),
     /** true = 需授权（默认不内置教材内容） */
-    isOfficial: boolean('is_official').notNull().default(false),
+    isOfficial: boolColumn('is_official').notNull().default(false),
     /** 🔴 教材词表的许可（与 word.license 同源，便于按教材整体审计） */
     license: varchar('license', { length: 64 }),
     /** 🔴 教材词表来源（导入渠道标识） */
     source: varchar('source', { length: 64 }),
-    enabledInMvp: boolean('enabled_in_mvp').notNull().default(false),
+    enabledInMvp: boolColumn('enabled_in_mvp').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('idx_textbook_stage').on(t.stageId)],
@@ -104,7 +105,7 @@ export const volume = pgTable(
     /** 上册/下册（承 contracts `VolumeType` 的语义，落库为 1/2；全一册为 NULL） */
     term: smallint('term'),
     sortOrder: smallint('sort_order').notNull(),
-    enabledInMvp: boolean('enabled_in_mvp').notNull().default(false),
+    enabledInMvp: boolColumn('enabled_in_mvp').notNull().default(false),
   },
   (t) => [
     uniqueIndex('uq_volume_textbook_code').on(t.textbookId, t.code),
