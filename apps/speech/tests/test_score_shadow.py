@@ -23,8 +23,9 @@ def test_score_shadow_returns_weighted_metrics(client: Any) -> None:
     assert data["fluency"] == 80.0
     assert data["completeness"] == 75.0
     assert data["prosody"] == 90.0
-    # 85*0.35 + 80*0.25 + 75*0.20 + 90*0.20 = 82.75
-    assert data["overall"] == 82.75
+    # §5.4 L1 单词级权重：准确度 0.80 + 流利度 0.20（完整度/韵律在 L1 不适用）
+    # 85*0.80 + 80*0.20 = 84.0
+    assert data["overall"] == 84.0
 
 
 def test_score_shadow_reports_confidence_and_grade(client: Any) -> None:
