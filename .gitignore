@@ -48,7 +48,18 @@ _tmp_*
 *.timestamp-*.mjs
 
 # 运行时数据（词库导入产物、SQLite 测试库等）
-/data/
+# 注意：必须写成 /data/* 而不是 /data/ —— 整目录忽略后 git 不会下钻，
+# 后面的 ! 否定规则对目录内的文件无效，样例字典就永远进不了仓库。
+/data/*
+!/data/sample-ecdict.csv
 
 # reinstall-deps.sh 重装依赖时的中间目录（内含 symlink，git 无法遍历）
 node_modules.old.*/
+
+# 构建产物（docker 镜像 tar、fpk 包动辄数百 MB，禁止入 git）
+*.tar.gz
+*.tgz
+*.fpk
+pnpm-store/
+.pnpm-store/
+*.whl
