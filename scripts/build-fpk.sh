@@ -1,165 +1,328 @@
 #!/usr/bin/env bash
-#
-# build-fpk.sh —— 按 fnOS 官方规范打包 EnglishForge 为 .fpk
-#
-# 🔴 权威依据：ops/fnos/FPK-SPEC.md（已核实官方文档 developer.fnnas.com/docs）
-#    本脚本替代了早期版本 —— 早期版本有 5 处与官方冲突，会导致安装直接失败：
-#      1. privilege 用 bash 写          → 官方是 JSON
-#      2. resource 声明 docker-project → 声明了会在镜像导入前就 compose up，直接 No such image
-#      3. manifest 用 [Package] 且缺 distributor 等 fnpack 强制字段
-#      4. 依赖 fnOS 托管 compose 生命周期 → 放弃 docker-project 后必须自己实现 up/down/status
-#      5. 完全没有 cmd/ 生命周期脚本     → fnOS 安装后无法启动容器
-#
+# ============================================================
+# EnglishForge · 飞牛 fnOS 应用中心 FPK 打包脚本（合规版）
+# 产物：dist/fpk/englishforge_v1.0.0.fpk （fnOS 官方「双层 gzip tar」）
+#   · 外层：manifest / ICON.PNG / ICON_256.PNG / app.tgz / cmd/ / config/ / wizard/
+#   · 内层 app.tgz：app/ 的内容（docker/ 与 ui/），解压后铺进安装目录的 target/
 # 用法：
-#   bash scripts/build-fpk.sh                      # 仅组装目录，不打 tar
-#   bash scripts/build-fpk.sh --images             # 先 docker save 导出镜像再组装
-#   bash scripts/build-fpk.sh --images --tar       # 完整流程，产出 .fpk
-#   bash scripts/build-fpk.sh --tar                # 跳过镜像导出，直接打包
-#
+#   bash scripts/build-fpk.sh            # 仅生成合规目录结构
+#   bash scripts/build-fpk.sh --images   # 把 5 个镜像 save 进包（离线安装必需）
+#   bash scripts/build-fpk.sh --tar      # 打成 .fpk
+#   bash scripts/build-fpk.sh --images --tar   # 生产打包（一次性）
+# ============================================================
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SPEC_DIR="${ROOT}/ops/fnos"
-TEMPLATE_DIR="${SPEC_DIR}/fpk"
-OUT_DIR="${ROOT}/dist/fpk"
-PKG="englishforge"
-VERSION="${VERSION:-1.0.0}"
+PKG=englishforge
+VERSION=1.0.0
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+OUT_DIR="$ROOT/dist/fpk"
+STAGE="$OUT_DIR/$PKG"                     # 平铺根（fpk 内的 / ）
+FPK="$OUT_DIR/${PKG}_v${VERSION}.fpk"
 
-WITH_IMAGES=0
-MAKE_TAR=0
-for arg in "$@"; do
-  case "${arg}" in
-    --images) WITH_IMAGES=1 ;;
-    --tar)    MAKE_TAR=1 ;;
-    -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "未知参数: ${arg}（用 --help 查看用法）" >&2; exit 1 ;;
+# ---- 架构自动探测（避免「应用包不符合系统要求」）----
+# fnOS 部分版本拒绝 platform=all / 缺失 arch 字段；这里直接在打包机上
+# 用 uname -m 探测，写进 manifest 的 arch 与 platform，保证与随包镜像一致。
+detect_arch() {
+  local m; m="$(uname -m 2>/dev/null || echo x86_64)"
+  case "$m" in
+    x86_64|amd64)  echo x86_64 ;;
+    aarch64|arm64) echo aarch64 ;;
+    *) echo x86_64 ;;                          # 兜底：绝大多数飞牛机型为 x86_64
+  esac
+}
+ARCH="${ARCH_OVERRIDE:-$(detect_arch)}"   # 可用 ARCH_OVERRIDE=x86_64 强制覆盖
+case "$ARCH" in
+  x86_64)  PLATFORM=x86 ;;
+  aarch64) PLATFORM=arm ;;
+  *)       PLATFORM=x86 ;;
+esac
+echo "架构    : $ARCH (platform=$PLATFORM)"
+
+# 随包分发的镜像（离线安装时先 docker load）
+IMAGES="englishforge/nginx:${VERSION} englishforge/api:${VERSION} englishforge/speech:${VERSION} englishforge/ai:${VERSION} postgres:16-alpine"
+
+IMAGES_FLAG=0; TAR_FLAG=0
+for a in "$@"; do
+  case "$a" in
+    --images) IMAGES_FLAG=1 ;;
+    --tar)    TAR_FLAG=1 ;;
   esac
 done
 
-[[ -d "${TEMPLATE_DIR}" ]] || { echo "✗ 缺少 FPK 模板目录 ${TEMPLATE_DIR}" >&2; exit 1; }
-
-# 版本号以 manifest 为单一来源
-if [[ -f "${TEMPLATE_DIR}/manifest" ]]; then
-  v=$(grep -E '^version[[:space:]]*=' "${TEMPLATE_DIR}/manifest" | head -1 | sed -E 's/.*=[[:space:]]*//' | tr -d '\r')
-  [[ -n "${v}" ]] && VERSION="${v}"
-fi
-
-COMPOSE="${ROOT}/docker-compose.yml"
-[[ -f "${COMPOSE}" ]] || { echo "✗ 缺少 ${COMPOSE}" >&2; exit 1; }
-
-# 从 compose 顶层 services 解析服务名（不依赖 PyYAML）
-mapfile -t SERVICES < <(awk '
-  /^services:[[:space:]]*$/ {f=1; next}
-  /^[a-zA-Z]/ {f=0}
-  f && /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ {k=$0; sub(/^  /,"",k); sub(/:.*/,"",k); print k}
-' "$COMPOSE")
-[[ ${#SERVICES[@]} -eq 0 ]] && { echo "✗ 无法从 ${COMPOSE} 解析服务列表" >&2; exit 1; }
-
 echo "=== EnglishForge FPK 打包 ==="
-echo "版本    : ${VERSION}"
-echo "服务    : ${SERVICES[*]}"
-echo "输出目录: ${OUT_DIR}"
-echo ""
+echo "版本    : $VERSION"
+echo "暂存目录: $STAGE"
+echo "产物    : $FPK"
 
-STAGE="${OUT_DIR}/${PKG}"
-# 清理上一轮产物。用 || true 保证：目录不存在、或被环境的安全删除钩子拦下时，
-# 脚本继续往下走（后续 cp/mkdir 会覆盖同名文件，不会残留脏数据）。
-if [[ -d "${STAGE}" ]]; then
-  rm -rf "${STAGE}" 2>/dev/null || {
-    echo "  ⚠ 无法完整清理 ${STAGE}（可能被占用），将覆盖式重建"
-  }
-fi
-mkdir -p "${STAGE}/config" "${STAGE}/cmd" "${STAGE}/app/ui/images" "${STAGE}/app/docker"
+# 1) 重建平铺暂存目录（fpk 内根）
+#    注意：fnOS 的 .fpk 是「双层 gzip tar」——外层只放 app.tgz（不是 app/ 目录），
+#    内层 app.tgz 装 app/ 的内容。这里先照开发目录结构生成 app/，最后交给 fnpack 打包。
+rm -rf "$STAGE"
+mkdir -p "$STAGE/app/docker/images" "$STAGE/app/ui/images" "$STAGE/cmd" "$STAGE/config" "$STAGE/wizard"
 
-# ── 1. 元数据：manifest / privilege / resource 已有核实过的权威版本 ──
-cp "${TEMPLATE_DIR}/manifest"          "${STAGE}/manifest"
-cp "${TEMPLATE_DIR}/config/privilege"  "${STAGE}/config/privilege"
-cp "${TEMPLATE_DIR}/config/resource"   "${STAGE}/config/resource"
+# 2) ICON（仓库内搜索）
+ICON=$(find "$ROOT" -maxdepth 2 -iname ICON.PNG 2>/dev/null | head -1)
+ICON256=$(find "$ROOT" -maxdepth 2 -iname ICON_256.PNG 2>/dev/null | head -1)
+[ -n "$ICON" ]    && cp -v "$ICON"    "$STAGE/ICON.PNG"    || { echo "✗ 找不到 ICON.PNG"; exit 1; }
+[ -n "$ICON256" ] && cp -v "$ICON256" "$STAGE/ICON_256.PNG" || { echo "✗ 找不到 ICON_256.PNG"; exit 1; }
 
-# ── 2. 生命周期脚本（install/upgrade/uninstall/config 各自 init+callback + main）──
-cp "${TEMPLATE_DIR}"/cmd/* "${STAGE}/cmd/"
-chmod +x "${STAGE}/cmd/"* 2>/dev/null || true
-
-# ── 3. 桌面入口 ──
-cp "${TEMPLATE_DIR}/app/ui/config" "${STAGE}/app/ui/config"
-# 复用仓库根的真实图标（由 scripts/generate-icons.py 生成）
-# 注意：Windows 上 ICON.png 与 ICON.PNG 是同一个文件（文件系统大小写不敏感），
-# 打包时统一输出为 fnOS 要求的 ICON.PNG / ICON_256.PNG。
-is_real_png() {
-  local f="$1"
-  [[ -f "$f" ]] || return 1
-  # PNG magic number：\x89PNG\r\n\x1a\n
-  local sig
-  sig=$(head -c 8 "$f" | od -An -tx1 | tr -d ' \n')
-  [[ "$sig" == "89504e470d0a1a0a" ]]
-}
-for pair in "ICON.PNG:ICON.PNG" "ICON_256.png:ICON_256.PNG"; do
-  src="${ROOT}/${pair%%:*}"; dst_name="${pair##*:}"
-  if is_real_png "${src}"; then
-    cp "${src}" "${STAGE}/app/ui/images/${dst_name}"
-    echo "  ✓ ${dst_name}"
+# 3) 部署用 docker-compose（无 build 段，只引用已构建/随包镜像）
+#    🔴 生成随机 JWT 密钥（≥32 字符）：env.ts 校验要求 JWT_*_SECRET min(32)，
+#    若写死 "change-me-in-production"(23字符) 会导致 api 启动即 parseEnv 失败 → 退出 → 502。
+gen_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 24          # 48 个 hex 字符，>32
   else
-    echo "  ⚠ 缺少有效 PNG 图标 ${src}，请先执行：python scripts/generate-icons.py"
+    head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n'
   fi
+}
+JWT_ACCESS_SECRET="$(gen_secret)"
+JWT_REFRESH_SECRET="$(gen_secret)"
+cat > "$STAGE/app/docker/docker-compose.yaml" <<'YAML'
+version: "3.8"
+services:
+  nginx:
+    image: englishforge/nginx:1.0.0
+    ports:
+      - "10011:80"
+    depends_on:
+      - api
+      - speech
+      - ai
+    restart: unless-stopped
+    networks:
+      - forge-net
+  api:
+    image: englishforge/api:1.0.0
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://forge:forge_password@postgres:5432/englishforge
+      - JWT_ACCESS_SECRET=__JWT_ACCESS_SECRET__
+      - JWT_REFRESH_SECRET=__JWT_REFRESH_SECRET__
+      - JWT_ISSUER=english-forge
+      - CORS_ORIGINS=*
+      - MEDIA_ROOT=/data/media
+      - SPEECH_URL=http://speech:8001
+      - AI_URL=http://ai:8002
+    volumes:
+      - media-data:/data/media
+    depends_on:
+      - postgres
+      - speech
+      - ai
+    restart: unless-stopped
+    networks:
+      - forge-net
+  speech:
+    image: englishforge/speech:1.0.0
+    restart: unless-stopped
+    networks:
+      - forge-net
+  ai:
+    image: englishforge/ai:1.0.0
+    environment:
+      - AI_PROVIDER=fake
+      - AI_API_KEY=
+      - AI_MODEL=gpt-4o
+      - AI_BASE_URL=
+      - AI_TIMEOUT=30
+    restart: unless-stopped
+    networks:
+      - forge-net
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=forge
+      - POSTGRES_PASSWORD=forge_password
+      - POSTGRES_DB=englishforge
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - forge-net
+volumes:
+  pg-data:
+  media-data:
+networks:
+  forge-net:
+    driver: bridge
+YAML
+
+# 3a) 注入随机 JWT 密钥（仅 hex 字符，sed 安全）
+sed -i "s#__JWT_ACCESS_SECRET__#${JWT_ACCESS_SECRET}#g; s#__JWT_REFRESH_SECRET__#${JWT_REFRESH_SECRET}#g" "$STAGE/app/docker/docker-compose.yaml"
+
+# 3b) 桌面入口（app/ui/config + 图标）
+#     fnOS 桌面图标 / 应用中心「打开」按钮由 app/ui/config 声明：
+#     - 入口定义在 ".url" 下，key 必须以 appname 为前缀（englishforge.main）
+#     - icon 的 {0} 是尺寸占位符，系统自动替换为 64/256，需同时提供两个尺寸
+#     - port 必须是字符串，且与 manifest 的 service_port 一致（10011）
+cat > "$STAGE/app/ui/config" <<'EOF'
+{
+  ".url": {
+    "englishforge.main": {
+      "title": "EnglishForge",
+      "icon": "images/icon-{0}.png",
+      "type": "url",
+      "protocol": "http",
+      "port": "10011",
+      "url": "/",
+      "allUsers": true
+    }
+  }
+}
+EOF
+# 桌面图标直接复用包图标（ICON.PNG=64、ICON_256.PNG=256）
+cp -f "$STAGE/ICON.PNG"     "$STAGE/app/ui/images/icon-64.png"
+cp -f "$STAGE/ICON_256.PNG" "$STAGE/app/ui/images/icon-256.png"
+
+# 4) manifest（INI）
+cat > "$STAGE/manifest" <<EOF
+appname = englishforge
+version = 1.0.0
+display_name = EnglishForge
+desc = 飞牛 NAS 私有化部署的全学段英语学习软件（本地优先、默认零外网）。
+platform = $PLATFORM
+source = thirdparty
+maintainer = EnglishForge
+maintainer_url = https://github.com/your-org/englishforge
+distributor = EnglishForge
+distributor_url = https://github.com/your-org/englishforge
+service_port = 10011
+checkport = true
+desktop_uidir = ui
+desktop_applaunchname = englishforge.main
+ctl_stop = true
+EOF
+
+# 5) config/privilege（JSON）
+cat > "$STAGE/config/privilege" <<'EOF'
+{
+  "defaults": {
+    "run-as": "package"
+  },
+  "username": "docker-englishforge",
+  "groupname": "docker-englishforge"
+}
+EOF
+
+# 6) config/resource（JSON）
+# Docker 类应用【必须】声明 docker-project，否则应用中心判定不满足系统要求（不管理容器生命周期）。
+# path 是相对 app/ 目录的路径，指向含 docker-compose.yaml 的文件夹（本包为 app/docker/）。
+# name 为 compose 项目名，须符合 compose 命名规则（小写/数字/连字符/下划线，且以字母或数字开头）。
+# 注意：不要声明 data-share —— fnOS 安装时会真实初始化共享目录（建目录+设 ACL），
+# 若存储卷缺 trimacl 选项会静默失败（社区 tid=68401），且本应用数据走 compose 命名卷，无需共享目录。
+cat > "$STAGE/config/resource" <<'EOF'
+{
+  "docker-project": {
+    "projects": [
+      { "name": "englishforge", "path": "docker" }
+    ]
+  }
+}
+EOF
+
+# 7) cmd/main（生命周期；Docker 类应用启停由应用中心直接跑 compose）
+cat > "$STAGE/cmd/main" <<'EOF'
+#!/bin/bash
+set -u
+STATUS_IMG="englishforge/nginx:1.0.0"
+running() { [ -n "$(docker ps -q --filter "ancestor=${STATUS_IMG}" 2>/dev/null)" ]; }
+case "${1:-}" in
+  start)  exit 0 ;;
+  stop)   exit 0 ;;
+  status) running && exit 0 || exit 3 ;;
+  *)      exit 0 ;;
+esac
+EOF
+chmod +x "$STAGE/cmd/main"
+
+# 8) install_callback（离线安装关键：把随包镜像 load 进本地 docker）
+#    安装时 app/ 的内容会被解压到 target/（TRIM_APPDEST），故镜像位于 ${TRIM_APPDEST}/docker/images
+cat > "$STAGE/cmd/install_callback" <<'EOF'
+#!/bin/bash
+set -u
+APPDEST="${TRIM_APPDEST:-/var/apps/englishforge/target}"
+IMG_DIR="${APPDEST}/docker/images"
+if [ -d "$IMG_DIR" ]; then
+  for f in "$IMG_DIR"/*.tar.gz; do
+    [ -e "$f" ] || continue
+    echo "docker load: $(basename "$f")"
+    docker load -i "$f"
+  done
+fi
+exit 0
+EOF
+chmod +x "$STAGE/cmd/install_callback"
+
+# 8b) 其余生命周期脚本（fnOS docker 应用校验要求 install_init / config_init / config_callback /
+#     uninstall_init / uninstall_callback / upgrade_init / upgrade_callback 均存在；
+#     这里给最小桩，docker 启停由应用中心直接托管 compose）。
+for s in install_init config_init config_callback uninstall_init uninstall_callback upgrade_init upgrade_callback; do
+  cat > "$STAGE/cmd/$s" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+  chmod +x "$STAGE/cmd/$s"
 done
 
-# ── 4. compose 与配置模板 ──
-cp "${COMPOSE}" "${STAGE}/app/docker/docker-compose.yaml"
-if [[ -d "${ROOT}/apps/nginx" ]]; then
-  mkdir -p "${STAGE}/app/docker/nginx"
-  cp -r "${ROOT}/apps/nginx/." "${STAGE}/app/docker/nginx/"
-fi
-if [[ -f "${ROOT}/.env.example" ]]; then
-  cp "${ROOT}/.env.example" "${STAGE}/app/docker/.env.template"
-else
-  cat > "${STAGE}/app/docker/.env.template" <<'ENVEOF'
-# 由 fnOS 安装向导生成真实随机值，请勿手工填写后分发
-POSTGRES_PASSWORD=__POSTGRES_PASSWORD__
-JWT_ACCESS_SECRET=__JWT_SECRET__
-JWT_REFRESH_SECRET=__JWT_SECRET__
-APP_MASTER_KEY=__APP_MASTER_KEY__
-ENVEOF
-fi
+# 9) wizard/（目录需存在且保持为空即可通过校验；不留 .keep 占位，避免被当成无效向导文件）
+#    （mkdir -p 已在步骤 1 创建该目录，此处无需再写文件）
 
-# ── 5. 镜像（体积大，默认不入包）──
-mkdir -p "${STAGE}/app/docker/images"
-if [[ ${WITH_IMAGES} -eq 1 ]]; then
-  command -v docker >/dev/null || { echo "✗ 未安装 docker，无法导出镜像" >&2; exit 1; }
-  for svc in "${SERVICES[@]}"; do
-    img=$(awk -v s="$svc" '
-      $0 ~ "^  "s":[[:space:]]*$" {inf=1; next}
-      inf && /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ {inf=0}
-      inf && /^[[:space:]]*image:[[:space:]]*/ {sub(/^[[:space:]]*image:[[:space:]]*/,""); print; exit}
-    ' "$COMPOSE")
-    if [[ -z "$img" ]]; then
-      echo "  · ${svc}: compose 未声明 image（走 build），跳过"
-      continue
-    fi
-    echo "  · 导出 ${img} ..."
-    docker save "$img" | gzip -1 > "${STAGE}/app/docker/images/${svc}.tar.gz"
+# 10) 导出镜像（可选）
+if [ "$IMAGES_FLAG" = "1" ]; then
+  echo "· 导出镜像 -> $STAGE/app/docker/images"
+  for img in $IMAGES; do
+    safe="$(echo "$img" | tr ':/' '__')"
+    echo "  - $img"
+    docker save "$img" | gzip > "$STAGE/app/docker/images/${safe}.tar.gz"
   done
-  echo "  ✓ 镜像已导出到 app/docker/images/"
 else
-  echo "  · 未指定 --images，跳过镜像导出"
-  echo "    生产打包：bash scripts/build-fpk.sh --images --tar"
+  echo "· 未指定 --images，跳过镜像导出（compose 将在安装时从仓库拉取，需联网）"
 fi
 
-# ── 6. 文档 ──
-[[ -f "${ROOT}/LICENSE" ]] && cp "${ROOT}/LICENSE" "${STAGE}/LICENSE"
-cp "${SPEC_DIR}/FPK-SPEC.md" "${STAGE}/README.md"
-mkdir -p "${STAGE}/changelog"
-echo "# ${PKG} ${VERSION}" > "${STAGE}/changelog/${VERSION}.md"
+# 11) 打包成 .fpk
+#     fnOS 的 .fpk 是「双层 gzip tar」：外层只放 app.tgz（+ cmd/config/wizard/manifest/ICON），
+#     内层 app.tgz 装 app/ 的内容（解压时直接铺进 target/，不带 app/ 前缀）。
+#     · 优先调用官方 fnpack build（与本机 fnOS 打包器行为一致）
+#     · 若无 fnpack，则手工等价实现
+if [ "$TAR_FLAG" = "1" ]; then
+  FNPACK_BIN="${FNPACK_BIN:-}"
+  if [ -z "$FNPACK_BIN" ]; then
+    for cand in fnpack /usr/local/bin/fnpack /usr/bin/fnpack ./fnpack; do
+      if command -v "$cand" >/dev/null 2>&1 || [ -x "$cand" ]; then FNPACK_BIN="$cand"; break; fi
+    done
+  fi
 
-# ── 7. 打包 ──
-if [[ ${MAKE_TAR} -eq 1 ]]; then
-  tar -czf "${OUT_DIR}/${PKG}_v${VERSION}.fpk" -C "${OUT_DIR}" "${PKG}"
-  SIZE=$(du -h "${OUT_DIR}/${PKG}_v${VERSION}.fpk" | cut -f1)
-  echo ""
-  echo "=== 完成 ==="
-  echo "产物: ${OUT_DIR}/${PKG}_v${VERSION}.fpk  (${SIZE})"
-  echo "上传: fnOS 应用中心 → 第三方应用"
+  if [ -n "$FNPACK_BIN" ]; then
+    echo "· 使用官方 fnpack 打包: $FNPACK_BIN"
+    ( cd "$OUT_DIR" && "$FNPACK_BIN" build --directory "$STAGE" )
+    SRC_FPK="$(find "$OUT_DIR" -maxdepth 2 -name "${PKG}.fpk" 2>/dev/null | head -1)"
+    if [ -n "$SRC_FPK" ]; then
+      mv -f "$SRC_FPK" "$FPK"
+    else
+      echo "✗ fnpack 未生成 ${PKG}.fpk（请检查上方输出）"; exit 1
+    fi
+  else
+    echo "· 未找到 fnpack，回退到手工双层 tar 打包"
+    tar -czf "$STAGE/app.tgz" -C "$STAGE/app" .   # 内层：app/ 内容（无 app/ 前缀）
+    rm -rf "$STAGE/app"
+    tar -czf "$FPK" -C "$STAGE" .                 # 外层
+  fi
+
+  echo "✓ 完成: $FPK"
+  echo "  外层顶层（应为 manifest / ICON.PNG / ICON_256.PNG / app.tgz / cmd / config / wizard）："
+  tar -tzf "$FPK" | sed 's#^\./##; s#/.*##' | sort -u
+  TMPD="$(mktemp -d)"
+  { tar -xzf "$FPK" -C "$TMPD" ./app.tgz 2>/dev/null || tar -xzf "$FPK" -C "$TMPD" app.tgz 2>/dev/null; } || true
+  if [ -f "$TMPD/app.tgz" ]; then
+    echo "  app.tgz 内层首层（应直接是 docker / ui，无 app/ 前缀）："
+    tar -tzf "$TMPD/app.tgz" | sed 's#^\./##; s#/.*##' | sort -u
+  else
+    echo "  ⚠ 外层未包含 app.tgz —— GUI 安装会报「解压 app.tgz 失败」"
+  fi
+  rm -rf "$TMPD"
 else
-  echo ""
-  echo "=== 目录已就绪: ${STAGE} ==="
-  echo "  打成 fpk:  bash scripts/build-fpk.sh --tar"
+  echo "· 未指定 --tar，仅生成结构目录: $STAGE"
+  echo "· 打成 fpk: bash $0 --tar"
 fi

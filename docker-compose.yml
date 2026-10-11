@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   nginx:
     image: englishforge/nginx:1.0.0

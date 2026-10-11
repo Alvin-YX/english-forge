@@ -1,8 +1,9 @@
-FROM python:3.13-slim AS base
+FROM python:3.12-slim AS base
 WORKDIR /app
 
 COPY apps/ai/pyproject.toml apps/ai/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# 使用阿里云 PyPI 镜像加速并规避网络限制（deb.debian.org 在 NAS 上常不通）
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
 
 COPY apps/ai/ ./
 

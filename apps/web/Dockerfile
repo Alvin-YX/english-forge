@@ -1,13 +1,20 @@
 # Stage 1: Build
 FROM node:22-alpine AS builder
 WORKDIR /app
-RUN corepack enable
+# corepack 下载 pnpm 本体要走国内镜像（registry.npmjs.org 在 NAS 上不可达）
+ENV COREPACK_NPM_REGISTRY=https://registry.npmmirror.com
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN sed -i 's#https://dl-cdn.alpinelinux.org/alpine#http://mirrors.aliyun.com/alpine#g' /etc/apk/repositories \
+ && apk add --no-cache python3 make g++
+COPY .npmrc .npmrc
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY tsconfig.base.json ./tsconfig.base.json
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/content/package.json packages/content/
 COPY packages/ui/package.json packages/ui/
 COPY apps/web/package.json apps/web/
-RUN pnpm install --frozen-lockfile --filter @eng-forge/web...
+ENV npm_config_build_from_source=true npm_config_disturl=https://npmmirror.com/mirrors/node
+RUN pnpm install --no-frozen-lockfile --filter @eng-forge/web...
 
 COPY packages/ packages/
 COPY apps/web/ apps/web/
