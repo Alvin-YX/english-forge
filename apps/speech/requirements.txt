@@ -1,9 +1,33 @@
+# ===========================================================================
+# speech 服务 —— 核心依赖
+#
+# 只装跑通服务与全部测试所需的最小集合。当前真实引擎未接入，
+# 服务以 `SPEECH_USE_FAKE=true` 运行 Fake 实现（见 src/speech/main.py），
+# 因此这里**不含** torch / faster-whisper / transformers / piper-tts。
+#
+# 真实语音引擎依赖（文档 §5.3 音素级评测四步链路）在 requirements-pipeline.txt：
+#
+#     pip install -r requirements.txt -r requirements-pipeline.txt
+#     # 或 docker build --build-arg WITH_PIPELINE=1 .
+#
+# 系统级依赖由 Dockerfile 用 apt 安装：
+#   ffmpeg     —— webm/opus → 16kHz 单声道 wav（链路第 0 步）
+#   espeak-ng  —— 预期文本 → IPA 音素序列（链路步骤③）
+# ===========================================================================
+
+# --- Web 服务 ---
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30,<1.0
 pydantic>=2.0,<3.0
+
+# --- 音频特征与数值计算 ---
+# librosa 自带 pYIN（§5.4 韵律内部权重的 f0 基频项）与 RMS（能量项），
+# 无需单独安装 pYIN 包。
 librosa>=0.10,<1.0
 scipy>=1.12,<2.0
 numpy>=1.26,<3.0
+
+# --- 测试与静态检查 ---
 pytest>=8.0,<9.0
 httpx>=0.27,<1.0
 ruff>=0.6,<1.0
