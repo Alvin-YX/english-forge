@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AudioCompare } from '../../components/common/AudioCompare';
 import { PageLoader } from '../../components/common/PageLoader';
-import { PhonemeBar } from '../../components/common/PhonemeBar';
-import type { PhonemeSegment } from '../../components/common/PhonemeBar';
 import { Recorder } from '../../components/common/Recorder';
+import { StateView } from '../../components/common/StateView';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { useResource } from '../../hooks/useResource';
 import { api } from '../../lib/api';
 import type {
   PracticeSessionResult,
@@ -15,63 +15,28 @@ import type {
   WordCard,
 } from '../../lib/types';
 
-const FALLBACK_WORDS: WordCard[] = [
-  {
-    id: '1',
-    headword: 'apple',
-    phonetic: '/ˈæpəl/',
-    translation: '苹果',
-    definition: '一种常见的水果，红色或绿色，圆形。',
-  },
-  {
-    id: '2',
-    headword: 'banana',
-    phonetic: '/bəˈnɑːnə/',
-    translation: '香蕉',
-    definition: '一种热带水果，外皮黄色，果肉白色。',
-  },
-  {
-    id: '3',
-    headword: 'orange',
-    phonetic: '/ˈɒrɪndʒ/',
-    translation: '橘子',
-    definition: '一种柑橘类水果，外皮橙色。',
-  },
-  {
-    id: '4',
-    headword: 'grape',
-    phonetic: '/ɡreɪp/',
-    translation: '葡萄',
-    definition: '一种藤本植物结出的浆果，可鲜食或酿酒。',
-  },
-  {
-    id: '5',
-    headword: 'watermelon',
-    phonetic: '/ˈwɔːtəmelən/',
-    translation: '西瓜',
-    definition: '一种大个头的水果，外皮绿色，果肉红色。',
-  },
-];
+/**
+ * 评分可靠性兜底（见开发文档 §5.6.1，标注为"不可协商"）。
+ * 三条规则在这里集中落地，改这里就等于改产品的伦理底线。
+ */
 
-// Approximate phoneme breakdowns for common words
-const PHONEME_MAP: Record<string, string[]> = {
-  apple: ['æ', 'p', 'əl'],
-  banana: ['bə', 'n', 'ɑː', 'n', 'ə'],
-  orange: ['ɒ', 'r', 'ɪ', 'nd', 'ʒ'],
-  grape: ['ɡ', 're', 'ɪ', 'p'],
-  watermelon: ['w', 'ɔː', 't', 'ə', 'm', 'e', 'l', 'ən'],
-};
+/** 规则②：异常录音（短于 0.5s）不给分 —— 太短的音频无法判断发音。 */
+const MIN_SCORED_SECONDS = 0.5;
 
-/** 评分等级 —— 与 ShadowScoreResult['grade'] 保持一致 */
-type Grade = ShadowScoreResult['grade'];
+/** 低置信阈值的二次校验：既看后端给的等级，也看数值本身。 */
+const LOW_CONFIDENCE_THRESHOLD = 0.4;
 
-function scoreToGrade(score: number): Grade {
-  if (score >= 90) return 'A';
-  if (score >= 80) return 'B';
-  if (score >= 70) return 'C';
-  if (score >= 60) return 'D';
-  if (score >= 50) return 'E';
-  return 'F';
+function isLowConfidence(result: ShadowScoreResult): boolean {
+  return (
+    result.confidence_level === 'low' ||
+    result.confidence < LOW_CONFIDENCE_THRESHOLD
+  );
+}
+
+/** word.id 是字符串，后端可能给纯数字也可能是业务 key —— 统一转成会话内稳定的 number。 */
+function wordIdOf(word: WordCard, index: number): number {
+  const n = Number.parseInt(word.id, 10);
+  return Number.isFinite(n) && n > 0 ? n : index + 1;
 }
 
 function gradeColor(grade: string): string {
@@ -92,7 +57,9 @@ function gradeColor(grade: string): string {
 }
 
 export function ShadowingPractice() {
-  const [words, setWords] = useState<WordCard[]>([]);
+  const { data, loading, error, reload } = useResource<WordCard[]>(
+    async () => api.get<WordCard[]>('/words'),
+  );
   const [index, setIndex] = useState(0);
   const [sessionResults, setSessionResults] = useState<
     PracticeSessionResult[]
@@ -103,29 +70,24 @@ export function ShadowingPractice() {
   const [currentScore, setCurrentScore] = useState<ShadowScoreResult | null>(
     null,
   );
-  const [currentPhonemes, setCurrentPhonemes] = useState<PhonemeSegment[]>([]);
-  const [scoreSubmitted, setScoreSubmitted] = useState(false);
+  const [scoreSubmitError, setScoreSubmitError] = useState<string | null>(null);
+  const [recordError, setRecordError] = useState<string | null>(null);
+  const [tooShort, setTooShort] = useState(false);
   const [isScoring, setIsScoring] = useState(false);
-  const [originalAudioUrl] = useState<string | null>(
-    null,
-  );
   const [recordingAudioUrl, setRecordingAudioUrl] = useState<string | null>(
     null,
   );
   const [isPlayingOriginal, setIsPlayingOriginal] = useState(false);
+  const [take, setTake] = useState(0);
 
   const speechSynthRef = useRef<SpeechSynthesisUtterance | null>(null);
+  // 保留最近一次评分提交的音频，供"重新提交刚才的录音"使用
+  const lastAttemptRef = useRef<{ audioBase64: string; duration: number } | null>(
+    null,
+  );
 
-  // Load words
-  useEffect(() => {
-    api
-      .get<WordCard[]>('/words')
-      .then((res) => {
-        if (res && res.length > 0) setWords(res.slice(0, 10));
-        else setWords(FALLBACK_WORDS);
-      })
-      .catch(() => setWords(FALLBACK_WORDS));
-  }, []);
+  // 一轮只取前 10 张词卡，避免单轮过长（memo 化以稳定数组引用）
+  const practiceWords = useMemo(() => data?.slice(0, 10) ?? [], [data]);
 
   // Cleanup speech synthesis on unmount
   useEffect(() => {
@@ -134,28 +96,9 @@ export function ShadowingPractice() {
     };
   }, []);
 
-  // Generate phoneme segments with simulated accuracy from score
-  const generatePhonemes = useCallback(
-    (word: string, score: number): PhonemeSegment[] => {
-      const basePhonemes = PHONEME_MAP[word] || word.split('');
-      const baseScore = score / basePhonemes.length;
-      return basePhonemes.map((p) => ({
-        text: p,
-        accuracy: Math.min(
-          100,
-          Math.max(
-            20,
-            Math.round(baseScore * (0.8 + Math.random() * 0.4)),
-          ),
-        ),
-      }));
-    },
-    [],
-  );
-
   // Play original pronunciation using Web Speech API
   const playOriginal = useCallback(() => {
-    const word = words[index];
+    const word = practiceWords[index];
     if (!word) return;
 
     window.speechSynthesis.cancel();
@@ -167,28 +110,28 @@ export function ShadowingPractice() {
     utterance.onerror = () => setIsPlayingOriginal(false);
     speechSynthRef.current = utterance;
     window.speechSynthesis.speak(utterance);
-  }, [words, index]);
-
-  const currentWord = words[index];
+  }, [practiceWords, index]);
 
   const nextWord = useCallback(() => {
-    if (index + 1 >= words.length) {
+    if (index + 1 >= practiceWords.length) {
       setSessionFinished(true);
       return;
     }
     setIndex((i) => i + 1);
     setCurrentScore(null);
-    setCurrentPhonemes([]);
-    setScoreSubmitted(false);
+    setScoreSubmitError(null);
+    setRecordError(null);
+    setTooShort(false);
     setRecordingAudioUrl(null);
-  }, [index, words.length]);
+  }, [index, practiceWords.length]);
 
   const prevWord = useCallback(() => {
     if (index > 0) {
       setIndex((i) => i - 1);
       setCurrentScore(null);
-      setCurrentPhonemes([]);
-      setScoreSubmitted(false);
+      setScoreSubmitError(null);
+      setRecordError(null);
+      setTooShort(false);
       setRecordingAudioUrl(null);
     }
   }, [index]);
@@ -198,21 +141,35 @@ export function ShadowingPractice() {
     setSessionResults([]);
     setSessionFinished(false);
     setCurrentScore(null);
-    setCurrentPhonemes([]);
-    setScoreSubmitted(false);
+    setScoreSubmitError(null);
+    setRecordError(null);
+    setTooShort(false);
     setRecordingAudioUrl(null);
+    lastAttemptRef.current = null;
   }, []);
 
-  // Handle recorder stop - submit for scoring
-  const handleRecordStop = useCallback(
+  /**
+   * 提交录音评分。刻意从 handleRecordStop 里抽出来，
+   * 这样"重试"按钮能复用同一段逻辑而不用重读文件。
+   */
+  const submitForScoring = useCallback(
     async (audioBase64: string, duration: number) => {
-      const word = words[index];
+      const word = practiceWords[index];
       if (!word) return;
 
+      // 规则②：异常录音不给分
+      if (duration < MIN_SCORED_SECONDS) {
+        setCurrentScore(null);
+        setScoreSubmitError(null);
+        setTooShort(true);
+        setRecordingAudioUrl(null);
+        return;
+      }
+
       setIsScoring(true);
-      setScoreSubmitted(false);
+      setTooShort(false);
+      setScoreSubmitError(null);
       setCurrentScore(null);
-      setCurrentPhonemes([]);
 
       try {
         const result = await api.post<ShadowScoreResult>(
@@ -224,83 +181,102 @@ export function ShadowingPractice() {
         );
 
         setCurrentScore(result);
-        setCurrentPhonemes(generatePhonemes(word.headword, result.overall));
 
-        // Track score in session results
-        const practiceResult: PracticeSessionResult = {
-          wordId: Number(word.id) || index + 1,
-          word: word.headword,
-          score: result.overall,
-          grade: result.grade,
-          isCorrect: result.overall >= 60,
-          durationMs: duration * 1000,
-        };
-        setSessionResults((prev) => {
-          const existing = prev.findIndex(
-            (r) => r.wordId === practiceResult.wordId,
-          );
-          if (existing >= 0) {
-            const next = [...prev];
-            next[existing] = practiceResult;
-            return next;
+        // 规则③：低置信度不给总分 —— 因此不计入会话统计，避免污染均分
+        if (!isLowConfidence(result)) {
+          const practiceResult: PracticeSessionResult = {
+            wordId: wordIdOf(word, index),
+            word: word.headword,
+            score: result.overall,
+            grade: result.grade,
+            isCorrect: result.overall >= 60,
+            durationMs: duration * 1000,
+          };
+          setSessionResults((prev) => {
+            const existing = prev.findIndex(
+              (r) => r.wordId === practiceResult.wordId,
+            );
+            if (existing >= 0) {
+              const next = [...prev];
+              next[existing] = practiceResult;
+              return next;
+            }
+            return [...prev, practiceResult];
+          });
+
+          // Auto-advance only when we actually produced a trustworthy score
+          if (result.overall >= 70 && index + 1 < practiceWords.length) {
+            setTimeout(() => {
+              nextWord();
+            }, 1500);
           }
-          return [...prev, practiceResult];
-        });
 
-        setScoreSubmitted(true);
-
-        // Auto-advance if score >= 70
-        if (result.overall >= 70 && index + 1 < words.length) {
-          setTimeout(() => {
-            nextWord();
-          }, 1500);
+          // Auto-add to errorbook if score < 60
+          if (result.overall < 60) {
+            try {
+              await api.post('/errorbook', {
+                kind: 'pronunciation',
+                target: word.headword,
+                translation: word.translation,
+              });
+            } catch (err) {
+              setRecordError(
+                `错题本写入失败：${err instanceof Error ? err.message : '未知错误'}`,
+              );
+            }
+          }
         }
 
-        // Auto-add to errorbook if score < 60
-        if (result.overall < 60) {
-          api
-            .post('/errorbook', {
-              kind: 'pronunciation',
-              target: word.headword,
-              translation: word.translation,
-            })
-            .catch(() => {});
-        }
-
-        // Submit learning record
-        api
-          .post('/learning/records', {
+        // Submit learning record（端点是 /learning/record，不是 /learning/records）
+        try {
+          await api.post('/learning/record', {
             kind: 'pronunciation',
             wordId: word.id,
             correct: result.overall >= 60,
             score: result.overall,
-          })
-          .catch(() => {});
-      } catch {
-        // Fallback: simulate score if API fails
-        const fallbackScore = 50 + Math.floor(Math.random() * 40);
-        const fallbackResult: ShadowScoreResult = {
-          accuracy: fallbackScore - 5,
-          fluency: fallbackScore + 3,
-          completeness: fallbackScore + 5,
-          prosody: fallbackScore - 2,
-          overall: fallbackScore,
-          confidence: 0.7,
-          confidence_level: 'medium',
-          grade: scoreToGrade(fallbackScore),
-          has_noise: false,
-          duration,
-          span_count: word.headword.length,
-        };
-        setCurrentScore(fallbackResult);
-        setCurrentPhonemes(generatePhonemes(word.headword, fallbackScore));
-        setScoreSubmitted(true);
+          });
+        } catch (err) {
+          setRecordError(
+            `学习记录上报失败：${err instanceof Error ? err.message : '未知错误'}`,
+          );
+        }
+      } catch (err) {
+        // 不再伪造分数。评分失败就明说，录音还在，可以重提。
+        setScoreSubmitError(
+          err instanceof Error ? err.message : '评分服务暂时不可用',
+        );
       } finally {
         setIsScoring(false);
       }
     },
-    [words, index, generatePhonemes, nextWord],
+    [practiceWords, index, nextWord],
   );
+
+  const handleRecordStop = useCallback(
+    (audioBase64: string, duration: number, audioUrl: string) => {
+      lastAttemptRef.current = { audioBase64, duration };
+      setRecordingAudioUrl(audioUrl);
+      void submitForScoring(audioBase64, duration);
+    },
+    [submitForScoring],
+  );
+
+  const retryScore = useCallback(() => {
+    const attempt = lastAttemptRef.current;
+    if (!attempt) return;
+    setTake((t) => t + 1);
+    setRecordingAudioUrl(null);
+    void submitForScoring(attempt.audioBase64, attempt.duration);
+  }, [submitForScoring]);
+
+  const retakeRecording = useCallback(() => {
+    setCurrentScore(null);
+    setScoreSubmitError(null);
+    setTooShort(false);
+    setRecordingAudioUrl(null);
+    lastAttemptRef.current = null;
+    setTake((t) => t + 1);
+  }, []);
 
   // Calculate session stats
   const avgScore =
@@ -311,17 +287,45 @@ export function ShadowingPractice() {
         )
       : 0;
 
-  if (words.length === 0) {
-    return <PageLoader message="正在加载词汇…" />;
+  if (loading) return <PageLoader message="正在加载词汇…" />;
+
+  if (error) {
+    return (
+      <Card>
+        <StateView
+          title="词库服务暂不可用"
+          message={error}
+          onRetry={reload}
+        />
+      </Card>
+    );
   }
 
+  if (practiceWords.length === 0) {
+    return (
+      <Card>
+        <StateView
+          icon="📭"
+          tone="muted"
+          title="词库还是空的"
+          message="请先导入词库数据（例如运行 scripts/import-ecdict.mjs），否则没有词可跟读。"
+          onRetry={reload}
+          retryLabel="重新检查"
+        />
+      </Card>
+    );
+  }
+
+  const currentWord = practiceWords[index];
   if (!currentWord) return null;
 
   // Session finished view
   if (sessionFinished) {
-    const bestScore = sessionResults.length > 0 ? Math.max(...sessionResults.map(r => r.score)) : 0;
-    const worstScore = sessionResults.length > 0 ? Math.min(...sessionResults.map(r => r.score)) : 0;
-    const passedCount = sessionResults.filter((r) => r.score >= 60).length;
+    const bestScore =
+      sessionResults.length > 0 ? Math.max(...sessionResults.map((r) => r.score)) : 0;
+    const worstScore =
+      sessionResults.length > 0 ? Math.min(...sessionResults.map((r) => r.score)) : 0;
+    const skippedCount = practiceWords.length - sessionResults.length;
 
     return (
       <div className="mx-auto max-w-2xl space-y-4">
@@ -336,26 +340,33 @@ export function ShadowingPractice() {
             跟读练习完成！
           </h2>
           <p className="mt-1 text-slate-500">
-            练习了 {words.length} 个词
+            练习了 {practiceWords.length} 个词
           </p>
 
-          <div className="mt-6 grid grid-cols-3 gap-3">
-            <div className="rounded-xl bg-primary-50 p-4">
-              <p className="text-2xl font-bold text-primary-700">{avgScore}</p>
-              <p className="text-xs text-slate-500">平均分</p>
+          {sessionResults.length === 0 ? (
+            <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
+              本轮没有得到有效评分（录音过短或评分置信度过低），因此不给出平均分。
+            </p>
+          ) : (
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              <div className="rounded-xl bg-primary-50 p-4">
+                <p className="text-2xl font-bold text-primary-700">{avgScore}</p>
+                <p className="text-xs text-slate-500">平均分</p>
+              </div>
+              <div className="rounded-xl bg-success-50 p-4">
+                <p className="text-2xl font-bold text-success-700">{bestScore}</p>
+                <p className="text-xs text-slate-500">最高分</p>
+              </div>
+              <div className="rounded-xl bg-danger-50 p-4">
+                <p className="text-2xl font-bold text-danger-700">{worstScore}</p>
+                <p className="text-xs text-slate-500">最低分</p>
+              </div>
             </div>
-            <div className="rounded-xl bg-success-50 p-4">
-              <p className="text-2xl font-bold text-success-700">{bestScore}</p>
-              <p className="text-xs text-slate-500">最高分</p>
-            </div>
-            <div className="rounded-xl bg-danger-50 p-4">
-              <p className="text-2xl font-bold text-danger-700">{worstScore}</p>
-              <p className="text-xs text-slate-500">最低分</p>
-            </div>
-          </div>
+          )}
 
           <p className="mt-4 text-sm text-slate-600">
-            通过 {passedCount}/{words.length} 个词（≥60分）
+            有效评分 {sessionResults.length}/{practiceWords.length} 个词（≥60分视为通过）
+            {skippedCount > 0 ? `，${skippedCount} 个词未得到有效评分` : ''}
           </p>
 
           {/* Word results */}
@@ -379,6 +390,8 @@ export function ShadowingPractice() {
     );
   }
 
+  const showOverall = currentScore !== null && !isLowConfidence(currentScore);
+
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       {/* Header */}
@@ -387,15 +400,15 @@ export function ShadowingPractice() {
           跟读练习 🎤
         </h1>
         <Badge variant="default">
-          {Math.min(index + 1, words.length)} / {words.length}
+          {Math.min(index + 1, practiceWords.length)} / {practiceWords.length}
         </Badge>
       </div>
 
       {/* Progress dots */}
       <div className="flex justify-center gap-1">
-        {words.map((word, i) => {
+        {practiceWords.map((word, i) => {
           const r = sessionResults.find(
-            (res) => res.wordId === (Number(word.id) || i + 1),
+            (res) => res.wordId === wordIdOf(word, i),
           );
           return (
             <span
@@ -445,41 +458,81 @@ export function ShadowingPractice() {
       {/* Recorder */}
       <Card className="p-6">
         <Recorder
-          key={scoreSubmitted ? 'recorded' : 'new'}
-          onStop={(audioBase64, duration, audioUrl) => {
-            setRecordingAudioUrl(audioUrl);
-            handleRecordStop(audioBase64, duration);
-          }}
+          key={take}
+          onStop={handleRecordStop}
           disabled={isScoring}
         />
+        <p className="mt-3 text-center text-xs text-slate-400">
+          录音短于 {MIN_SCORED_SECONDS} 秒不会计分
+        </p>
       </Card>
 
+      {/* Too-short notice */}
+      {tooShort ? (
+        <Card>
+          <StateView
+            icon="⏱️"
+            tone="muted"
+            compact
+            title="录音太短，不给评分"
+            message={`短于 ${MIN_SCORED_SECONDS} 秒的录音无法判断发音，请完整跟读这个词后再试一次。`}
+            onRetry={retakeRecording}
+            retryLabel="重新录音"
+          />
+        </Card>
+      ) : null}
+
+      {/* Score submission failure —— 不伪造分数，允许重提 */}
+      {scoreSubmitError ? (
+        <Card>
+          <StateView
+            title="评分服务暂时不可用"
+            message={scoreSubmitError}
+            onRetry={retryScore}
+            retryLabel="重新提交刚才的录音"
+          />
+        </Card>
+      ) : null}
+
       {/* Score results */}
-      {scoreSubmitted && currentScore ? (
+      {currentScore ? (
         <Card className="p-6">
           <h3 className="mb-4 text-base font-semibold text-slate-900">
             评分结果
           </h3>
 
-          {/* Overall score */}
-          <div className="mb-4 flex items-center justify-center gap-4">
-            <div
-              className={`flex h-20 w-20 items-center justify-center rounded-full text-3xl font-bold ${gradeColor(currentScore.grade)}`}
-            >
-              {currentScore.overall}
-            </div>
-            <div className="text-left">
-              <p className="text-lg font-bold text-slate-900">
-                等级 {currentScore.grade}
+          {/* Overall score —— 规则③：低置信度不给总分 */}
+          {isLowConfidence(currentScore) ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
+              <p className="text-2xl">🔍</p>
+              <p className="mt-2 text-sm font-medium text-slate-900">
+                置信度过低，暂不给总分
               </p>
-              <p className="text-sm text-slate-500">
-                置信度: {currentScore.confidence_level}
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                本次录音的置信度为 {Math.round(currentScore.confidence * 100)}%（{currentScore.confidence_level}），
+                不足以支撑一个可信的分数。换个安静的环境重新录音通常能解决。
               </p>
-              {currentScore.has_noise ? (
-                <p className="text-xs text-warning-600">⚠ 检测到背景噪声</p>
-              ) : null}
             </div>
-          </div>
+          ) : (
+            <div className="mb-4 flex items-center justify-center gap-4">
+              <div
+                className={`flex h-20 w-20 items-center justify-center rounded-full text-3xl font-bold ${gradeColor(currentScore.grade)}`}
+              >
+                {currentScore.overall}
+              </div>
+              <div className="text-left">
+                <p className="text-lg font-bold text-slate-900">
+                  等级 {currentScore.grade}
+                </p>
+                <p className="text-sm text-slate-500">
+                  置信度: {currentScore.confidence_level}
+                </p>
+                {currentScore.has_noise ? (
+                  <p className="text-xs text-warning-600">⚠ 检测到背景噪声</p>
+                ) : null}
+              </div>
+            </div>
+          )}
 
           {/* 4 dimensions */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -501,15 +554,30 @@ export function ShadowingPractice() {
             ))}
           </div>
 
-          {/* Phoneme analysis */}
-          {currentPhonemes.length > 0 && (
-            <div className="mt-4">
-              <h4 className="mb-2 text-sm font-medium text-slate-700">
-                音素分析
-              </h4>
-              <PhonemeBar segments={currentPhonemes} />
+          {/* 规则④：低分只能归因环境，不能归因孩子能力 */}
+          {showOverall && currentScore.overall < 60 ? (
+            <div className="mt-4 rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm text-warning-700">
+              <p className="font-semibold">
+                {currentScore.has_noise ? '🔇 环境噪声偏大' : '🎯 这个词可以再练一次'}
+              </p>
+              <p className="mt-1 text-xs leading-5">
+                {currentScore.has_noise
+                  ? '背景声较大时评分会偏低，这是环境因素，不代表发音能力。'
+                  : '换个姿势或放慢语速重读一次，通常能明显改善。'}
+              </p>
             </div>
-          )}
+          ) : null}
+
+          {/* 音素级明细 —— 后端尚未提供该字段，如实说明而不是伪造 */}
+          <div className="mt-4">
+            <StateView
+              icon="🔤"
+              tone="muted"
+              compact
+              title="音素级明细暂不可用"
+              message="评分服务尚未返回逐音素的准确率数据（/speech/align/phoneme），因此这里不展示逐音素柱状图。"
+            />
+          </div>
 
           {/* A/B Comparison */}
           <div className="mt-4">
@@ -517,17 +585,28 @@ export function ShadowingPractice() {
               A/B 对比
             </h4>
             <AudioCompare
-              originalUrl={originalAudioUrl}
+              originalUrl={null}
               recordingUrl={recordingAudioUrl}
             />
+            <p className="mt-2 text-xs text-slate-400">
+              原声侧需要 TTS 服务（/speech/tts）提供可下载的音频，当前尚未接入，因此只有你的录音可回放。
+            </p>
           </div>
+
+          {/* Side-effect failures */}
+          {recordError ? (
+            <div className="mt-4 rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm text-warning-700">
+              <span className="font-semibold">⚠️ {recordError}</span>
+              —— 评分已给出，但这一步没有写进服务端。
+            </div>
+          ) : null}
 
           {/* Actions */}
           <div className="mt-5 flex justify-center gap-2">
-            <Button variant="outline" onClick={() => setScoreSubmitted(false)}>
+            <Button variant="outline" onClick={retakeRecording}>
               重新录音
             </Button>
-            {index + 1 < words.length ? (
+            {index + 1 < practiceWords.length ? (
               <Button onClick={nextWord}>下一个 →</Button>
             ) : (
               <Button onClick={nextWord}>完成</Button>
@@ -551,7 +630,7 @@ export function ShadowingPractice() {
         <Button
           variant="secondary"
           onClick={nextWord}
-          disabled={index >= words.length - 1}
+          disabled={index >= practiceWords.length - 1}
         >
           下一个 →
         </Button>
