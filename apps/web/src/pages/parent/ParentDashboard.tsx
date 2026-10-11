@@ -1,54 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { PageLoader } from '../../components/common/PageLoader';
+import { StateView } from '../../components/common/StateView';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card, StatCard } from '../../components/ui/Card';
+import { useResource } from '../../hooks/useResource';
 import { api } from '../../lib/api';
 import type { ChildProfile } from '../../lib/types';
 
-const FALLBACK_CHILDREN: ChildProfile[] = [
-  {
-    id: '1',
-    displayName: '小明',
-    grade: '小学 3 年级',
-    streakDays: 7,
-    todayWords: 12,
-    xp: 2580,
-    lastStudyAt: null,
-    avatarColor: '#2563eb',
-  },
-  {
-    id: '2',
-    displayName: '小红',
-    grade: '小学 5 年级',
-    streakDays: 3,
-    todayWords: 8,
-    xp: 1840,
-    lastStudyAt: null,
-    avatarColor: '#059669',
-  },
-];
-
 export function ParentDashboard() {
-  const [children, setChildren] = useState<ChildProfile[]>([]);
+  const { data, loading, error, reload } = useResource<ChildProfile[]>(
+    async () => api.get<ChildProfile[]>('/me/children'),
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  const children = useMemo(() => data ?? [], [data]);
 
   useEffect(() => {
-    api
-      .get<ChildProfile[]>('/me/children')
-      .then((res) => {
-        setChildren(res && res.length > 0 ? res : FALLBACK_CHILDREN);
-      })
-      .catch(() => setChildren(FALLBACK_CHILDREN))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (children.length > 0 && !selectedId) {
-      setSelectedId(children[0]!.id);
-    }
+    const first = children[0];
+    if (first && !selectedId) setSelectedId(first.id);
   }, [children, selectedId]);
 
   const selected = children.find((c) => c.id === selectedId);
@@ -62,11 +33,22 @@ export function ParentDashboard() {
 
       {loading ? (
         <PageLoader message="正在加载孩子档案…" />
+      ) : error ? (
+        <Card>
+          <StateView
+            title="孩子档案服务暂不可用"
+            message={error}
+            onRetry={reload}
+          />
+        </Card>
       ) : children.length === 0 ? (
-        <Card className="p-8 text-center">
-          <p className="text-5xl">👥</p>
-          <p className="mt-3 font-medium text-slate-900">还没有孩子档案</p>
-          <p className="mt-1 text-sm text-slate-500">联系学生账号添加后即可在此查看</p>
+        <Card>
+          <StateView
+            icon="👥"
+            tone="muted"
+            title="还没有孩子档案"
+            message="联系学生账号添加后即可在此查看"
+          />
         </Card>
       ) : (
         <>
@@ -123,11 +105,14 @@ export function ParentDashboard() {
               <Card className="p-5">
                 <h2 className="mb-3 text-base font-semibold text-slate-900">快捷操作</h2>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <Button variant="secondary" size="sm">发送提醒</Button>
-                  <Button variant="secondary" size="sm">查看周报</Button>
-                  <Button variant="secondary" size="sm">调整目标</Button>
-                  <Button variant="secondary" size="sm">导出记录</Button>
+                  <Button variant="secondary" size="sm" disabled title="功能开发中">发送提醒</Button>
+                  <Button variant="secondary" size="sm" disabled title="功能开发中">查看周报</Button>
+                  <Button variant="secondary" size="sm" disabled title="功能开发中">调整目标</Button>
+                  <Button variant="secondary" size="sm" disabled title="功能开发中">导出记录</Button>
                 </div>
+                <p className="mt-2 text-xs text-slate-400">
+                  这四项功能尚未开发，按钮已禁用以免误触
+                </p>
               </Card>
             </>
           ) : null}

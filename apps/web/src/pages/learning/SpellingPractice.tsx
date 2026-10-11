@@ -1,38 +1,50 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import { PageLoader } from '../../components/common/PageLoader';
+import { StateView } from '../../components/common/StateView';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
+import { useResource } from '../../hooks/useResource';
 import { api } from '../../lib/api';
 import type { WordCard } from '../../lib/types';
-
-const FALLBACK_WORDS: WordCard[] = [
-  { id: '1', headword: 'apple', phonetic: '/ˈæpəl/', translation: '苹果', definition: '一种常见的水果，红色或绿色。' },
-  { id: '2', headword: 'banana', phonetic: '/bəˈnɑːnə/', translation: '香蕉', definition: '一种热带水果。' },
-  { id: '3', headword: 'orange', phonetic: '/ˈɒrɪndʒ/', translation: '橘子', definition: '一种柑橘类水果。' },
-  { id: '4', headword: 'grape', phonetic: '/ɡreɪp/', translation: '葡萄', definition: '一种藤本植物结出的浆果。' },
-  { id: '5', headword: 'watermelon', phonetic: '/ˈwɔːtəmelən/', translation: '西瓜', definition: '一种大个头的水果。' },
-];
 
 type Feedback = { correct: boolean; expected: string; input: string } | null;
 
 export function SpellingPractice() {
-  const [words, setWords] = useState<WordCard[]>([]);
+  const { data, loading, error, reload } = useResource<WordCard[]>(
+    async () => api.get<WordCard[]>('/words'),
+  );
   const [index, setIndex] = useState(0);
   const [input, setInput] = useState('');
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [results, setResults] = useState<boolean[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  const [recordError, setRecordError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api
-      .get<WordCard[]>('/words')
-      .then(setWords)
-      .catch(() => setWords(FALLBACK_WORDS));
-  }, []);
+  const words = useMemo(() => data ?? [], [data]);
+
+  const recordResult = useCallback(
+    async (word: WordCard, correct: boolean, inputNorm: string) => {
+      setRecordError(null);
+      try {
+        await api.post('/learning/record', {
+          kind: 'spell',
+          wordId: word.id,
+          correct,
+          input: inputNorm,
+          expected: word.headword,
+        });
+      } catch (err) {
+        setRecordError(
+          err instanceof Error ? err.message : '学习记录上报失败',
+        );
+      }
+    },
+    [],
+  );
 
   const submit = useCallback(
     async (e: FormEvent) => {
@@ -49,18 +61,7 @@ export function SpellingPractice() {
         return next;
       });
       setSubmitted(true);
-
-      try {
-        await api.post('/learning/record', {
-          kind: 'spell',
-          wordId: word.id,
-          correct,
-          input: normalized,
-          expected: word.headword,
-        });
-      } catch {
-        // 静默
-      }
+      void recordResult(word, correct, normalized);
 
       if (index + 1 < words.length) {
         setTimeout(() => {
@@ -71,7 +72,7 @@ export function SpellingPractice() {
         }, 1200);
       }
     },
-    [index, input, submitted, words],
+    [index, input, submitted, words, recordResult],
   );
 
   const skip = useCallback(() => {
@@ -85,6 +86,7 @@ export function SpellingPractice() {
       return next;
     });
     setSubmitted(true);
+    void recordResult(word, false, '—');
     setTimeout(() => {
       if (index + 1 < words.length) {
         setIndex((i) => i + 1);
@@ -93,10 +95,35 @@ export function SpellingPractice() {
         setSubmitted(false);
       }
     }, 1000);
-  }, [index, words]);
+  }, [index, words, recordResult]);
+
+  if (loading) return <PageLoader message="正在加载词汇…" />;
+
+  if (error) {
+    return (
+      <Card>
+        <StateView
+          title="词库服务暂不可用"
+          message={error}
+          onRetry={reload}
+        />
+      </Card>
+    );
+  }
 
   if (words.length === 0) {
-    return <PageLoader message="正在加载词汇…" />;
+    return (
+      <Card>
+        <StateView
+          icon="📭"
+          tone="muted"
+          title="词库还是空的"
+          message="请先导入词库数据（例如运行 scripts/import-ecdict.mjs），否则没有词可拼。"
+          onRetry={reload}
+          retryLabel="重新检查"
+        />
+      </Card>
+    );
   }
 
   const current = words[index];
@@ -173,6 +200,13 @@ export function SpellingPractice() {
                 你的输入：<code className="font-mono">{feedback.input || '(空)'}</code> · 正确答案：
                 <code className="font-mono">{feedback.expected}</code>
               </p>
+            </div>
+          ) : null}
+
+          {recordError ? (
+            <div className="rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm text-warning-700">
+              <span className="font-semibold">⚠️ 判分已完成，但学习记录上报失败：</span>
+              {recordError}
             </div>
           ) : null}
 

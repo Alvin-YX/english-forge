@@ -1,56 +1,77 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { PageLoader } from '../../components/common/PageLoader';
+import { StateView } from '../../components/common/StateView';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { useResource } from '../../hooks/useResource';
 import { api } from '../../lib/api';
 import type { WordCard } from '../../lib/types';
 
-const FALLBACK_WORDS: WordCard[] = [
-  { id: '1', headword: 'apple', phonetic: '/ˈæpəl/', translation: '苹果', definition: '一种常见的水果，红色或绿色，圆形。' },
-  { id: '2', headword: 'banana', phonetic: '/bəˈnɑːnə/', translation: '香蕉', definition: '一种热带水果，外皮黄色，果肉白色。' },
-  { id: '3', headword: 'orange', phonetic: '/ˈɒrɪndʒ/', translation: '橘子；橙色', definition: '一种柑橘类水果，外皮橙色。' },
-  { id: '4', headword: 'grape', phonetic: '/ɡreɪp/', translation: '葡萄', definition: '一种藤本植物结出的浆果，可鲜食或酿酒。' },
-  { id: '5', headword: 'watermelon', phonetic: '/ˈwɔːtəmelən/', translation: '西瓜', definition: '一种大个头的水果，外皮绿色，果肉红色。' },
-];
-
 export function WordCardPractice() {
-  const [cards, setCards] = useState<WordCard[]>([]);
+  const { data, loading, error, reload } = useResource<WordCard[]>(
+    async () => api.get<WordCard[]>('/words'),
+  );
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api
-      .get<WordCard[]>('/words')
-      .then(setCards)
-      .catch(() => setCards(FALLBACK_WORDS));
-  }, []);
+  const cards = data ?? [];
 
   const go = useCallback(
     (delta: number) => {
       if (cards.length === 0) return;
       setFlipped(false);
-      setIndex((i) => {
-        const next = (i + delta + cards.length) % cards.length;
-        return next;
-      });
+      setIndex((i) => (i + delta + cards.length) % cards.length);
     },
     [cards.length],
   );
 
   const handleComplete = async () => {
+    setSaveError(null);
     try {
-      await api.post('/learning/mastery', { wordIds: cards.map((c) => c.id), result: 'complete' });
-    } catch {
-      // 静默失败
+      await api.post('/learning/mastery', {
+        wordIds: cards.map((c) => c.id),
+        result: 'complete',
+      });
+      setCompleted(true);
+    } catch (err) {
+      // 不再静默：掌握度上报失败就明说，不能让用户以为已记账
+      setSaveError(
+        err instanceof Error ? err.message : '学习记录保存失败，请重试',
+      );
     }
-    setCompleted(true);
   };
 
+  if (loading) return <PageLoader message="正在加载词卡…" />;
+
+  if (error) {
+    return (
+      <Card>
+        <StateView
+          title="词库服务暂不可用"
+          message={error}
+          onRetry={reload}
+        />
+      </Card>
+    );
+  }
+
   if (cards.length === 0) {
-    return <PageLoader message="正在加载词卡…" />;
+    return (
+      <Card>
+        <StateView
+          icon="📭"
+          tone="muted"
+          title="词库还是空的"
+          message="请先导入词库数据（例如运行 scripts/import-ecdict.mjs），否则没有词可复习。"
+          onRetry={reload}
+          retryLabel="重新检查"
+        />
+      </Card>
+    );
   }
 
   const current = cards[index];
@@ -76,6 +97,16 @@ export function WordCardPractice() {
         </Card>
       ) : (
         <>
+          {saveError ? (
+            <div className="rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">
+              <p className="font-semibold">⚠️ 学习记录保存失败</p>
+              <p className="mt-1">
+                {saveError}
+                —— 本轮已学完 {cards.length} 张词卡，但掌握度没有上报到服务端。
+              </p>
+            </div>
+          ) : null}
+
           <div
             className="relative h-80 cursor-pointer select-none [perspective:1200px]"
             onClick={() => setFlipped((v) => !v)}

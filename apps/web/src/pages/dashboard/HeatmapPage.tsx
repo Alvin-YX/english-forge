@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { PageLoader } from '../../components/common/PageLoader';
+import { StateView } from '../../components/common/StateView';
 import { Badge } from '../../components/ui/Badge';
 import { Card } from '../../components/ui/Card';
+import { useResource } from '../../hooks/useResource';
 import { api } from '../../lib/api';
 import type { HeatmapCell, HeatmapData } from '../../stores/learning';
 
@@ -25,29 +27,49 @@ function levelOf(count: number): 0 | 1 | 2 | 3 | 4 {
 const dayLabels = ['一', '二', '三', '四', '五', '六', '日'];
 
 export function HeatmapPage() {
-  const [data, setData] = useState<HeatmapData | null>(null);
+  const { data, loading, error, reload } = useResource<HeatmapData>(
+    async () => api.get<HeatmapData>('/learning/heatmap'),
+  );
   const [selected, setSelected] = useState<HeatmapCell | null>(null);
 
-  useEffect(() => {
-    api
-      .get<HeatmapData>('/learning/heatmap')
-      .then((res) => {
-        if (res && !res.weeks?.length) {
-          setData(buildMockHeatmap());
-        } else {
-          setData(res);
-        }
-      })
-      .catch(() => setData(buildMockHeatmap()));
-  }, []);
-
+  const weeks = data?.weeks ?? [];
   const totalWords = useMemo(() => data?.totalWords ?? 0, [data]);
 
-  if (!data) {
-    return <PageLoader message="正在加载热力图…" />;
+  if (loading) return <PageLoader message="正在加载热力图…" />;
+
+  if (error) {
+    return (
+      <Card>
+        <StateView
+          title="学习记录服务暂不可用"
+          message={error}
+          onRetry={reload}
+        />
+      </Card>
+    );
   }
 
-  const weeks = data.weeks.length > 0 ? data.weeks : buildMockHeatmap().weeks;
+  // 后端返回空周列表，与"服务不可用"是两回事 —— 前者是还没有任何学习记录
+  if (weeks.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">学习热力图</h1>
+          <p className="mt-1 text-slate-500">过去 12 周的学习记录一览</p>
+        </div>
+        <Card>
+          <StateView
+            icon="📭"
+            tone="muted"
+            title="还没有学习记录"
+            message="完成任何一次跟读、拼写或听写练习后，热力图就会开始记录。"
+            onRetry={reload}
+            retryLabel="重新检查"
+          />
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -78,7 +100,7 @@ export function HeatmapPage() {
                       type="button"
                       onClick={() => setSelected(cell)}
                       title={`${cell.date} · ${cell.count} 词`}
-                      className={`h-5 w-5 rounded-sm transition hover:ring-2 hover:ring-primary-400 ${levelColors[cell.level]}`}
+                      className={`h-5 w-5 rounded-sm transition hover:ring-2 hover:ring-primary-400 ${levelColors[levelOf(cell.count)]}`}
                     />
                   ))}
                 </div>
@@ -110,9 +132,9 @@ export function HeatmapPage() {
               <p className="text-sm text-slate-500">日期</p>
               <p className="mt-1 text-lg font-semibold text-slate-900">{selected.date}</p>
               <p className="mt-1 text-xs text-slate-500">
-                {selected.level === 0
+                {selected.count === 0
                   ? '当日未学习'
-                  : `活跃度等级 ${selected.level}/4`}
+                  : `活跃度等级 ${levelOf(selected.count)}/4`}
               </p>
             </div>
           </div>
@@ -122,32 +144,4 @@ export function HeatmapPage() {
       </Card>
     </div>
   );
-}
-
-function buildMockHeatmap(): HeatmapData {
-  const weeks: HeatmapCell[][] = [];
-  const today = new Date();
-  const start = new Date(today);
-  start.setDate(today.getDate() - 7 * 11 - today.getDay());
-
-  const cursor = new Date(start);
-  while (weeks.length < 12) {
-    const week: HeatmapCell[] = [];
-    for (let i = 0; i < 7; i++) {
-      const count = Math.floor(Math.random() * 25);
-      week.push({
-        date: cursor.toISOString().slice(0, 10),
-        count,
-        level: levelOf(count),
-      });
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    weeks.push(week);
-  }
-
-  const total = weeks
-    .flat()
-    .reduce((sum, c) => sum + c.count, 0);
-
-  return { weeks, totalWords: total };
 }

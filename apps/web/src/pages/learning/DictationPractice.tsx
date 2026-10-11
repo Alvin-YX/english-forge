@@ -1,39 +1,30 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import { PageLoader } from '../../components/common/PageLoader';
+import { StateView } from '../../components/common/StateView';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
+import { useResource } from '../../hooks/useResource';
 import { api } from '../../lib/api';
 import type { SentenceItem } from '../../lib/types';
-
-const FALLBACK_SENTENCES: SentenceItem[] = [
-  { id: '1', sentence: 'The sun rises in the east.', translation: '太阳从东方升起。' },
-  { id: '2', sentence: 'Practice makes perfect.', translation: '熟能生巧。' },
-  { id: '3', sentence: 'Every day I learn a new word.', translation: '我每天学一个新单词。' },
-];
 
 type Feedback = { correct: boolean; expected: string; input: string } | null;
 
 export function DictationPractice() {
-  const [sentences, setSentences] = useState<SentenceItem[]>([]);
+  const { data, loading, error, reload } = useResource<SentenceItem[]>(
+    async () => api.get<SentenceItem[]>('/words/sentences'),
+  );
   const [index, setIndex] = useState(0);
   const [input, setInput] = useState('');
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [results, setResults] = useState<boolean[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  const [recordError, setRecordError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api
-      .get<SentenceItem[]>('/words/sentences')
-      .then((res) => {
-        if (res && res.length > 0) setSentences(res);
-        else setSentences(FALLBACK_SENTENCES);
-      })
-      .catch(() => setSentences(FALLBACK_SENTENCES));
-  }, []);
+  const sentences = useMemo(() => data ?? [], [data]);
 
   const normalize = (s: string) =>
     s
@@ -58,6 +49,7 @@ export function DictationPractice() {
         return next;
       });
       setSubmitted(true);
+      setRecordError(null);
 
       try {
         await api.post('/learning/record', {
@@ -67,8 +59,10 @@ export function DictationPractice() {
           input: inputNorm,
           expected: item.sentence,
         });
-      } catch {
-        // 静默
+      } catch (err) {
+        setRecordError(
+          err instanceof Error ? err.message : '学习记录上报失败',
+        );
       }
 
       if (index + 1 < sentences.length) {
@@ -83,8 +77,33 @@ export function DictationPractice() {
     [index, input, sentences, submitted],
   );
 
+  if (loading) return <PageLoader message="正在加载句子…" />;
+
+  if (error) {
+    return (
+      <Card>
+        <StateView
+          title="例句服务暂不可用"
+          message={error}
+          onRetry={reload}
+        />
+      </Card>
+    );
+  }
+
   if (sentences.length === 0) {
-    return <PageLoader message="正在加载句子…" />;
+    return (
+      <Card>
+        <StateView
+          icon="📭"
+          tone="muted"
+          title="例句库还是空的"
+          message="请先导入例句数据（例如运行 scripts/import-sentences.mjs），否则没有句子可听写。"
+          onRetry={reload}
+          retryLabel="重新检查"
+        />
+      </Card>
+    );
   }
 
   const current = sentences[index];
@@ -152,6 +171,13 @@ export function DictationPractice() {
                 参考答案：
                 <span className="font-mono">{feedback.expected}</span>
               </p>
+            </div>
+          ) : null}
+
+          {recordError ? (
+            <div className="rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm text-warning-700">
+              <span className="font-semibold">⚠️ 判分已完成，但学习记录上报失败：</span>
+              {recordError}
             </div>
           ) : null}
 
