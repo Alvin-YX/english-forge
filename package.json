@@ -21,9 +21,15 @@
     "format": "prettier --write \"**/*.{ts,tsx,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md,yaml,yml}\"",
     "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
-    "build": "pnpm -r --filter \"./apps/*\" --filter \"./packages/*\" build"
+    "build": "pnpm -r --filter \"./apps/*\" --filter \"./packages/*\" build",
+    "db:migrate": "pnpm --filter @eng-forge/db migrate",
+    "db:migrate:sqlite": "pnpm --filter @eng-forge/db migrate:sqlite",
+    "import:ecdict": "tsx scripts/import-ecdict.mjs",
+    "import:sentences": "tsx scripts/import-sentences.mjs",
+    "seed:textbooks": "tsx scripts/seed-textbooks.mjs"
   },
   "devDependencies": {
+    "@eng-forge/db": "workspace:*",
     "@types/node": "^22.10.2",
     "@typescript-eslint/eslint-plugin": "^8.18.1",
     "@typescript-eslint/parser": "^8.18.1",
@@ -36,6 +42,7 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "globals": "^15.14.0",
     "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

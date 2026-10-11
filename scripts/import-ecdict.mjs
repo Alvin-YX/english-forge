@@ -31,6 +31,8 @@ import { word, EXAM_TAGS } from '@eng-forge/db/schema/content.js';
 // ─────────────────────────────────────────────────────────────
 
 const DEFAULT_CSV_PATH = 'data/ecdict.csv';
+/** 随仓库自带的样例字典（9 条，仅够跑通导入链路）。 */
+const SAMPLE_CSV_PATH = 'data/sample-ecdict.csv';
 const BATCH_SIZE = 1000;
 
 const ECDICT_LICENSE = 'ecdict-1.0';
@@ -329,23 +331,35 @@ async function insertBatch(db, batch) {
 async function main() {
   const args = parseArgs({
     options: {
-      file: { type: 'string', default: DEFAULT_CSV_PATH },
+      file: { type: 'string' },
       limit: { type: 'string' },
       reset: { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
     },
   });
 
-  const csvPath = resolve(process.cwd(), args.values.file ?? DEFAULT_CSV_PATH);
   const limit = args.values.limit !== undefined ? Number(args.values.limit) : undefined;
   const dryRun = args.values['dry-run'] === true;
   const reset = args.values.reset === true;
 
   // ── 1. 检查文件 ───────────────────────────────────────────
+  // 未显式 --file 且完整字典缺失时，回退到随仓库样例，保证
+  // 「克隆 → migrate → import」能直接跑通；显式指定 --file 则不猜。
+  let csvPath = resolve(process.cwd(), args.values.file ?? DEFAULT_CSV_PATH);
+  let usingSample = false;
+
+  if (args.values.file === undefined && !existsSync(csvPath)) {
+    const samplePath = resolve(process.cwd(), SAMPLE_CSV_PATH);
+    if (existsSync(samplePath)) {
+      csvPath = samplePath;
+      usingSample = true;
+    }
+  }
+
   if (!existsSync(csvPath)) {
     console.error(`❌ CSV 文件不存在：${csvPath}`);
-    console.error(`   请先下载 ECDICT 字典（https://github.com/skywind3000/ECDICT）`);
-    console.error(`   放到 ${DEFAULT_CSV_PATH} 或用 --file 指定路径。`);
+    console.error(`   请下载完整 ECDICT 字典（https://github.com/skywind3000/ECDICT）`);
+    console.error(`   放到 ${DEFAULT_CSV_PATH}，或用 --file 指定路径。`);
     process.exit(1);
   }
 
@@ -366,6 +380,13 @@ async function main() {
   console.log(`   文件：${csvPath}`);
   console.log(`   行数：${dataRows.length}${limit !== undefined ? `（限制 ${limit}）` : ''}`);
   console.log(`   模式：${dryRun ? 'dry-run（不落库）' : reset ? '重置 + 导入' : '导入'}`);
+  if (usingSample) {
+    console.log(
+      `⚠️  未找到 ${DEFAULT_CSV_PATH}，已回退到随仓库样例 ` +
+        `${SAMPLE_CSV_PATH}（仅 9 条词条，只够跑通链路）。`,
+    );
+    console.log(`   生产部署请下载完整字典放到 ${DEFAULT_CSV_PATH}。`);
+  }
   console.log('');
 
   const startTime = Date.now();
@@ -378,15 +399,20 @@ async function main() {
   };
 
   // ── 2. 连接数据库 ─────────────────────────────────────────
+  // dry-run 只做解析与预览，不连库——否则「没配 DATABASE_URL 就不能看预览」，
+  // 而预览本就是为了在下载完整字典前先确认 CSV 能被正确解析。
   let client;
-  try {
-    client = createDb();
-  } catch (err) {
-    console.error(`❌ 数据库连接失败：${err.message}`);
-    console.error(`   请确保 DATABASE_URL 环境变量已设置。`);
-    process.exit(1);
+  let db = null;
+  if (!dryRun) {
+    try {
+      client = createDb();
+    } catch (err) {
+      console.error(`❌ 数据库连接失败：${err.message}`);
+      console.error(`   请确保 DATABASE_URL 环境变量已设置。`);
+      process.exit(1);
+    }
+    db = client.db;
   }
-  const db = client.db;
 
   // ── 3. 重置（--reset） ────────────────────────────────────
   if (reset && !dryRun) {
@@ -462,7 +488,7 @@ async function main() {
   if (dryRun) console.log('   ⚠ dry-run 模式，未落库');
   console.log('═'.repeat(52));
 
-  await client.close();
+  if (client) await client.close();
 }
 
 main().catch((err) => {
