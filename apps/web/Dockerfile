@@ -11,6 +11,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY tsconfig.base.json ./tsconfig.base.json
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/content/package.json packages/content/
+COPY packages/db/package.json packages/db/
 COPY packages/ui/package.json packages/ui/
 COPY apps/web/package.json apps/web/
 ENV npm_config_build_from_source=true npm_config_disturl=https://npmmirror.com/mirrors/node
