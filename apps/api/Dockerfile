@@ -44,6 +44,7 @@ COPY --from=builder /app/tsconfig.base.json tsconfig.base.json
 COPY --from=builder /app/apps/api/tsconfig.json apps/api/tsconfig.json
 COPY --from=builder /app/apps/api/src/ apps/api/src/
 COPY --from=builder /app/apps/api/package.json apps/api/package.json
+COPY --from=builder /app/apps/api/docker-start.sh apps/api/docker-start.sh
 
 EXPOSE 3000
 # 🔴 用 tsx 直接跑 TS 源码：@eng-forge/contracts / @eng-forge/db 等 workspace 共享包
@@ -56,4 +57,7 @@ EXPOSE 3000
 # tsconfig.json extends base.json，所以两个文件都必须拷进生产阶段。
 # 用 `pnpm exec tsx` 而非硬编码 .bin 路径：pnpm 在本镜像已通过 corepack 启用，
 # 能可靠解析 bin 并透传 SIGTERM（fnOS 停止应用时的优雅退出）。
-CMD ["pnpm", "exec", "tsx", "--tsconfig", "apps/api/tsconfig.json", "apps/api/src/main.ts"]
+# CMD 走 apps/api/docker-start.sh：先跑幂等 schema 迁移，再起 Nest。
+# 迁移不能放进 install_callback —— fpk 安装时它只做 docker load，容器与数据库都还没起来；
+# 不在此兜底则全新安装的库无表，首个注册直接 500（relation "user" does not exist）。
+CMD ["sh", "apps/api/docker-start.sh"]
