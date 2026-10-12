@@ -40,6 +40,8 @@ ENV npm_config_build_from_source=true npm_config_disturl=https://npmmirror.com/m
 RUN pnpm install --no-frozen-lockfile --filter @eng-forge/api... --prod
 
 COPY --from=builder /app/packages/ packages/
+COPY --from=builder /app/tsconfig.base.json tsconfig.base.json
+COPY --from=builder /app/apps/api/tsconfig.json apps/api/tsconfig.json
 COPY --from=builder /app/apps/api/src/ apps/api/src/
 COPY --from=builder /app/apps/api/package.json apps/api/package.json
 
@@ -49,6 +51,9 @@ EXPOSE 3000
 # （ERR_MODULE_NOT_FOUND: .../packages/contracts/src/types/index.js）。
 # 与 apps/api 的 dev/start 脚本（tsx src/main.ts）保持一致，去除「先编译全部共享包」的复杂度。
 # tsx 已移入 apps/api 的 dependencies（见 package.json），pnpm install --prod 会一并安装。
+# 🔴 必须显式 `--tsconfig apps/api/tsconfig.json`：tsx 只从 CWD 找 tsconfig.json，仓库根只有 tsconfig.base.json（不含 experimentalDecorators），
+# 默认配置下 esbuild 直接报「Parameter decorators only work when experimental decorators are enabled」崩溃。
+# tsconfig.json extends base.json，所以两个文件都必须拷进生产阶段。
 # 用 `pnpm exec tsx` 而非硬编码 .bin 路径：pnpm 在本镜像已通过 corepack 启用，
 # 能可靠解析 bin 并透传 SIGTERM（fnOS 停止应用时的优雅退出）。
-CMD ["pnpm", "exec", "tsx", "apps/api/src/main.ts"]
+CMD ["pnpm", "exec", "tsx", "--tsconfig", "apps/api/tsconfig.json", "apps/api/src/main.ts"]
