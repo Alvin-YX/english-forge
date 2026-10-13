@@ -5,8 +5,9 @@
  *   - GET   /me               获取当前用户档案
  *   - PATCH /me/profile       更新当前用户档案
  *   - GET   /me/children      列出已绑定的孩子（家长角色）
- *   - POST  /me/children/bind    绑定孩子（家长角色，幂等）
+ *   - POST  /me/children/bind    绑定孩子（家长角色，幂等；childId 或 username 二选一）
  *   - POST  /me/children/unbind  解绑孩子（家长角色）
+ *   - GET   /users/search     按用户名/昵称模糊搜索可绑定的学生（家长角色，见 user-search.controller）
  *
  * 🔴 所有公开方法第一个参数都是 scope（@CurrentUser() 注入）。
  *    业务查询必须经 scope 过滤，禁止采信外部传入的 userId 直接查表。
@@ -23,7 +24,7 @@ import { z } from 'zod';
 
 import { BusinessError, notFoundError, rbacDeniedError } from '../../common/errors.business.js';
 import { DbConnection } from '../../infra/db/db.module.js';
-import { asc, eq } from '../../infra/db/query.js';
+import { and, asc, eq, ilike, isNull, ne, or } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
 
 // ═══════════════════════════════════════════════════════════
@@ -57,10 +58,19 @@ export interface UserProfileView {
 /** 家长可见孩子视图 */
 export interface ChildView {
   childId: number;
+  /** 被绑定学生的登录用户名 —— 解绑需要 childId，展示/对账需要 username */
+  username: string;
   displayName: string;
   stageCode?: string;
   stageId?: number;
   createdAt: string;
+}
+
+/** 可绑定学生候选视图（`GET /users/search`） */
+export interface SearchStudentView {
+  userId: number;
+  username: string;
+  displayName: string | null;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -83,21 +93,50 @@ export const UPDATE_PROFILE_SCHEMA = z.object({
   phone: z.string().max(32).optional(),
 });
 
-export const BIND_CHILD_SCHEMA = z.object({
-  childId: z.number().int().positive(),
-  relation: z
-    .enum(['father', 'mother', 'grandfather', 'grandmother', 'other_guardian'])
-    .optional(),
-  agreed: z.boolean().optional(),
-});
+/**
+ * 绑定孩子：`childId` 与 `username` 二选一。
+ *
+ * 家长不知道（也不该知道）孩子的内部自增 id，所以主路径是 username；
+ * childId 保留给已知 id 的调用方（测试、内部工具）。
+ */
+export const BIND_CHILD_SCHEMA = z
+  .object({
+    childId: z.number().int().positive().optional(),
+    username: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .regex(/^\S+$/, 'username 不能包含空白')
+      .optional(),
+    relation: z
+      .enum(['father', 'mother', 'grandfather', 'grandmother', 'other_guardian'])
+      .optional(),
+    agreed: z.boolean().optional(),
+  })
+  .refine(
+    (v) => (v.childId === undefined) !== (v.username === undefined),
+    'childId 与 username 必须提供且只能提供一个',
+  );
 
 export const UNBIND_CHILD_SCHEMA = z.object({
   childId: z.number().int().positive(),
 });
 
+export const SEARCH_USERS_SCHEMA = z.object({
+  q: z
+    .string()
+    .trim()
+    .max(64)
+    .optional(),
+  // query 参数到达时是字符串，需 coerce 成数字
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+});
+
 export type UpdateProfileInput = z.infer<typeof UPDATE_PROFILE_SCHEMA>;
 export type BindChildInput = z.infer<typeof BIND_CHILD_SCHEMA>;
 export type UnbindChildInput = z.infer<typeof UNBIND_CHILD_SCHEMA>;
+export type SearchUsersInput = z.infer<typeof SEARCH_USERS_SCHEMA>;
 
 // ═══════════════════════════════════════════════════════════
 // 协议常量
@@ -175,6 +214,7 @@ export class UserService {
     const rows = await this.conn.db
       .select({
         childId: parentChildren.childId,
+        username: user.username,
         displayName: user.displayName,
         stageCode: userProfile.stageCode,
         stageId: userProfile.stageId,
@@ -188,6 +228,7 @@ export class UserService {
 
     return rows.map((row) => ({
       childId: row.childId,
+      username: row.username ?? '',
       displayName: row.displayName ?? '未知用户',
       stageCode: row.stageCode ?? undefined,
       stageId: row.stageId ?? undefined,
@@ -201,22 +242,61 @@ export class UserService {
       throw rbacDeniedError();
     }
 
-    const { childId } = input;
+    let childId: number;
+
+    if (input.childId !== undefined) {
+      childId = input.childId;
+    } else {
+      const username = input.username;
+      // zod 的 .refine() 不能收窄类型，编译器仍认为 username 可能是 undefined
+      if (username === undefined) {
+        throw new BusinessError(
+          ErrorCode.VALIDATION_FAILED,
+          'childId 与 username 必须提供且只能提供一个',
+          400,
+        );
+      }
+
+      // 家长只知道孩子注册时的用户名，不知道内部自增 id。
+      const [byUsername] = await this.conn.db
+        .select({ id: user.id })
+        .from(user)
+        .where(and(eq(user.username, username), isNull(user.deletedAt)))
+        .limit(1);
+
+      if (byUsername === undefined) {
+        throw notFoundError(ErrorCode.RESOURCE_NOT_FOUND, '孩子账号不存在');
+      }
+      childId = byUsername.id;
+    }
 
     // 校验孩子账号存在
     const [child] = await this.conn.db
-      .select({ id: user.id })
+      .select({ id: user.id, role: user.role })
       .from(user)
-      .where(eq(user.id, childId))
+      .where(and(eq(user.id, childId), isNull(user.deletedAt)))
       .limit(1);
 
     if (child === undefined) {
       throw notFoundError(ErrorCode.RESOURCE_NOT_FOUND, '孩子账号不存在');
     }
 
+    // 只能绑定学生账号，不能把家长/教师绑成"孩子"
+    if (child.role !== Role.STUDENT) {
+      throw new BusinessError(
+        ErrorCode.OPERATION_NOT_ALLOWED,
+        '只能绑定学生账号',
+        400,
+      );
+    }
+
     // 不能将自己绑定为孩子
     if (childId === scope.userId) {
-      throw new BusinessError(ErrorCode.OPERATION_NOT_ALLOWED, '不能将自己绑定为孩子', 400);
+      throw new BusinessError(
+        ErrorCode.OPERATION_NOT_ALLOWED,
+        '不能将自己绑定为孩子',
+        400,
+      );
     }
 
     // 幂等：已绑定则直接返回
@@ -262,6 +342,43 @@ export class UserService {
     if (result.length === 0) {
       throw notFoundError(ErrorCode.RESOURCE_NOT_FOUND, '该孩子未绑定或不属于当前账号');
     }
+  }
+
+  /** GET /users/search —— 按用户名/昵称模糊搜索可绑定的学生（家长角色） */
+  async searchStudents(scope: ProfileScope, input: SearchUsersInput): Promise<SearchStudentView[]> {
+    if (scope.role !== Role.PARENT) {
+      throw rbacDeniedError();
+    }
+
+    const keyword = input.q?.trim() ?? '';
+    const limit = input.limit ?? 20;
+    if (!keyword) return [];
+
+    // 只出学生账号：家长/教师不能出现在绑定候选里，且绝不返回自己
+    const pattern = `%${keyword}%`;
+    const rows = await this.conn.db
+      .select({
+        userId: user.id,
+        username: user.username,
+        displayName: user.displayName,
+      })
+      .from(user)
+      .where(
+        and(
+          eq(user.role, Role.STUDENT),
+          isNull(user.deletedAt),
+          ne(user.id, scope.userId),
+          or(ilike(user.username, pattern), ilike(user.displayName, pattern)),
+        ),
+      )
+      .orderBy(asc(user.username))
+      .limit(limit);
+
+    return rows.map((row) => ({
+      userId: row.userId,
+      username: row.username,
+      displayName: row.displayName ?? null,
+    }));
   }
 
   // ═══════════════════════════════════════════════════════════

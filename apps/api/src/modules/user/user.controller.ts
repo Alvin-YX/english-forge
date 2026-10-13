@@ -66,7 +66,11 @@ export class UserController {
   @Post('children/bind')
   @Roles(Role.PARENT)
   @HttpCode(200)
-  @ApiOperation({ summary: '绑定孩子（家长角色，幂等）' })
+  @ApiOperation({
+    summary: 'PARENT：绑定孩子（幂等，自动写入 consent_log）',
+    description:
+      'childId 与 username 二选一。家长侧传 username（如 "xiaoming"）即可，后端负责解析成 childId。',
+  })
   async bindChild(
     @CurrentUser() scope: ProfileScope,
     @Body(zodPipe(BIND_CHILD_SCHEMA)) body: BindChildInput,

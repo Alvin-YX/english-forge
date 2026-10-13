@@ -34,15 +34,27 @@ export interface ErrorBookItem {
   lastSeenAt: string;
 }
 
-export interface ChildProfile {
-  id: string;
+/**
+ * 家长已绑定的孩子 —— 严格对齐后端 `GET /me/children` 的 `ChildView`。
+ *
+ * 旧版 `ChildProfile` 里的 streakDays / todayWords / xp / lastStudyAt
+ * 后端从未返回过，页面上一直是 undefined 渲染出的假统计；现已删除。
+ * 按孩子聚合学习数据的端点尚未实现，需要时后端补 `/me/children/:id/stats`。
+ */
+export interface ChildView {
+  childId: number;
+  username: string;
   displayName: string;
-  avatarColor?: string;
-  grade?: string;
-  streakDays: number;
-  todayWords: number;
-  xp: number;
-  lastStudyAt: string | null;
+  stageCode?: string;
+  stageId?: number;
+  createdAt: string;
+}
+
+/** 可绑定的学生候选 —— 对齐后端 `GET /users/search` 的 `SearchStudentView` */
+export interface StudentCandidate {
+  userId: number;
+  username: string;
+  displayName: string | null;
 }
 
 // ── Gamification types ──
