@@ -66,11 +66,27 @@ export interface LoginInput {
   password: string;
 }
 
+/** 登录/注册返回的当前用户摘要（前端 AuthUser 契约） */
+export interface AuthUserView {
+  id: number;
+  username: string;
+  displayName: string;
+  role: Role;
+}
+
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
   tokenType: 'Bearer';
   expiresIn: number;
+  /**
+   * 当前用户摘要。
+   *
+   * 🔴 必须带：前端 setAuth(token, token, data.user) 依赖它初始化 Zustand 的 user，
+   *    缺失时 localStorage 会写入字面量 'undefined'，刷新后 initAuthState 读不到
+   *    user 就把 isAuthenticated 归零，用户被迫重新登录。
+   */
+  user: AuthUserView;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -248,6 +264,12 @@ export class AuthService {
       refreshToken,
       tokenType: 'Bearer',
       expiresIn: this.env.JWT_ACCESS_TTL_SEC,
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName ?? user.username,
+        role: user.role,
+      },
     };
   }
 

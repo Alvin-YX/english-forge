@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { TOKEN_KEY_ACCESS, TOKEN_KEY_REFRESH, TOKEN_KEY_USER } from '../lib/env';
 
 export interface AuthUser {
-  id: string;
+  id: number;
   username: string;
   displayName: string;
   role: 'student' | 'parent' | 'admin';
@@ -17,9 +17,10 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
 
-  setAuth: (accessToken: string, refreshToken: string, user: AuthUser) => void;
+  setAuth: (accessToken: string, refreshToken: string, user?: AuthUser) => void;
   clearAuth: () => void;
   setUser: (user: AuthUser) => void;
+  clearUser: () => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
 }
@@ -45,8 +46,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   setAuth: (accessToken, refreshToken, user) => {
     localStorage.setItem(TOKEN_KEY_ACCESS, accessToken);
     localStorage.setItem(TOKEN_KEY_REFRESH, refreshToken);
-    localStorage.setItem(TOKEN_KEY_USER, JSON.stringify(user));
-    set({ accessToken, refreshToken, user, isAuthenticated: true, error: null });
+    // user 缺失时不写 key（写成字面量 'undefined' 会让刷新后的 initAuthState
+    // 反序列化失败并把 isAuthenticated 归零）。缺失就保持 null，由页面自己拉 /me。
+    if (user) {
+      localStorage.setItem(TOKEN_KEY_USER, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(TOKEN_KEY_USER);
+    }
+    set({ accessToken, refreshToken, user: user ?? null, isAuthenticated: true, error: null });
   },
 
   clearAuth: () => {
@@ -61,6 +68,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user });
   },
 
+  clearUser: () => {
+    localStorage.removeItem(TOKEN_KEY_USER);
+    set({ user: null });
+  },
+
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
 }));
@@ -73,7 +85,9 @@ export function initAuthState(): void {
   const accessToken = localStorage.getItem(TOKEN_KEY_ACCESS);
   const refreshToken = localStorage.getItem(TOKEN_KEY_REFRESH);
   const user = readStoredUser();
-  if (accessToken && user) {
+  // 只看 token 是否有效：user 缺失不该把人踢回登录页（后端 token 才是权威），
+  // 页面自己会拉 /me 补齐用户信息。
+  if (accessToken) {
     useAuthStore.setState({
       accessToken,
       refreshToken,
