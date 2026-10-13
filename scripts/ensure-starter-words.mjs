@@ -14,6 +14,10 @@
  *   ECF_SEED_CSV=data/ecdict.csv pnpm exec tsx scripts/ensure-starter-words.mjs
  * 不传 ECF_SEED_CSV 时走 import-ecdict.mjs 自身的回退：data/ecdict.csv 缺失则用
  * data/sample-ecdict.csv。
+ *
+ * 🔴 本仓库 scripts/*.mjs 一律是纯 JS：tsx 不会对 .mjs 剥离 TypeScript 类型标注，
+ * 函数签名写 `(): Promise<number>` 会在容器里直接抛 SyntaxError 让整个启动灌词步骤崩掉
+ * （2026-10-14 生产实测）。要写类型就得把文件改成 .mts。
  */
 
 import { spawnSync } from 'node:child_process';
@@ -21,7 +25,7 @@ import { spawnSync } from 'node:child_process';
 import { createDb } from '@eng-forge/db/client.js';
 import { word } from '@eng-forge/db/schema/content.js';
 
-async function countWords(): Promise<number> {
+async function countWords() {
   const client = createDb();
   try {
     const rows = await client.db.select({ id: word.id }).from(word).limit(1);
@@ -31,7 +35,7 @@ async function countWords(): Promise<number> {
   }
 }
 
-async function main(): Promise<void> {
+async function main() {
   let existing = 0;
   try {
     existing = await countWords();
