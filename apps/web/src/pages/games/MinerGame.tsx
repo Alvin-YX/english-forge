@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { PageLoader } from '../../components/common/PageLoader';
-import { api } from '../../lib/api';
+import { apiList } from '../../lib/api';
 import type { WordCard } from '../../lib/types';
 
 import { GameShell, useGameContext } from './GameShell';
@@ -68,7 +68,7 @@ function MinerInner() {
   const loadWords = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get<WordCard[]>('/words?pageSize=200');
+      const data = await apiList.get<WordCard>('/words?pageSize=200');
       setWords(
         data.filter(
           (w) => w.translation && w.headword && w.translation.trim().length > 0,

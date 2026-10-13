@@ -3,6 +3,8 @@ import type { ApiResponse } from '@eng-forge/contracts';
 import { clearAuth } from '../stores/auth';
 
 import { API_BASE_URL, TOKEN_KEY_ACCESS, TOKEN_KEY_REFRESH } from './env';
+import type { PaginatedResponse } from './types';
+
 
 export class ApiClientError extends Error {
   readonly status: number;
@@ -142,6 +144,30 @@ async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
   }
   return envelope.data;
 }
+
+/**
+ * 分页列表端点的统一解包器。
+ *
+ * 🔴 后端所有「列表」端点返回的都是分页信封
+ *    `{ items, total, page, pageSize, totalPages }`（见
+ *    `apps/api` 的 content / errorbook 控制器），**不是裸数组**。
+ * 此前各页面直接 `api.get<Item[]>('/words')` 并按数组消费，在词库为空时
+ * `data.slice()` 抛 `TypeError`，且仓库没有 ErrorBoundary，
+ * 直接导致白屏（2026-10-13 用户实测「点跟读白屏」）。
+ *
+ * 用这个助手替代 `api.get` 调用分页端点，`.items` 解包集中在一处，
+ * 页面侧仍拿到纯数组，下游取值逻辑无需改动。
+ *
+ * 🔴 只用于分页端点。返回裸数组的端点（`/words/units/:unitId`、
+ * `/words/:id/examples`、`/gamification/badges`、`/me/children`）
+ * 必须继续用 `api.get`，误用会拿到 `undefined`。
+ */
+export const apiList = {
+  get: <T>(path: string, init?: ApiOptions) =>
+    apiRequest<PaginatedResponse<T>>(path, { ...init, method: 'GET' }).then(
+      (page) => (Array.isArray(page?.items) ? page.items : []),
+    ),
+};
 
 export const api = {
   get: <T>(path: string, init?: ApiOptions) => apiRequest<T>(path, { ...init, method: 'GET' }),

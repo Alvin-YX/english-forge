@@ -8,14 +8,14 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { useResource } from '../../hooks/useResource';
-import { api } from '../../lib/api';
+import { api, apiList } from '../../lib/api';
 import type { WordCard } from '../../lib/types';
 
 type Feedback = { correct: boolean; expected: string; input: string } | null;
 
 export function SpellingPractice() {
   const { data, loading, error, reload } = useResource<WordCard[]>(
-    async () => api.get<WordCard[]>('/words'),
+    async () => apiList.get<WordCard>('/words'),
   );
   const [index, setIndex] = useState(0);
   const [input, setInput] = useState('');

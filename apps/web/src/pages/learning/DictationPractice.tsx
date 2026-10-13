@@ -8,14 +8,14 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { useResource } from '../../hooks/useResource';
-import { api } from '../../lib/api';
+import { api, apiList } from '../../lib/api';
 import type { SentenceItem } from '../../lib/types';
 
 type Feedback = { correct: boolean; expected: string; input: string } | null;
 
 export function DictationPractice() {
   const { data, loading, error, reload } = useResource<SentenceItem[]>(
-    async () => api.get<SentenceItem[]>('/words/sentences'),
+    async () => apiList.get<SentenceItem>('/words/sentences'),
   );
   const [index, setIndex] = useState(0);
   const [input, setInput] = useState('');

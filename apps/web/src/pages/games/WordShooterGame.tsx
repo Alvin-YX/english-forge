@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { PageLoader } from '../../components/common/PageLoader';
-import { api } from '../../lib/api';
+import { apiList } from '../../lib/api';
 import type { WordCard } from '../../lib/types';
 
 import { GameShell, useGameContext } from './GameShell';
@@ -40,7 +40,7 @@ function WordShooterInner() {
   const loadWords = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get<WordCard[]>('/words?pageSize=100');
+      const data = await apiList.get<WordCard>('/words?pageSize=100');
       const pool = data.filter((w) => w.translation && w.headword);
       wordPoolRef.current = pool;
       setWords(pool);

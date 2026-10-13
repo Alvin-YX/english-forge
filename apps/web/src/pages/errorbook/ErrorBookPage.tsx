@@ -4,7 +4,7 @@ import { PageLoader } from '../../components/common/PageLoader';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { api } from '../../lib/api';
+import { api, apiList } from '../../lib/api';
 import type { ErrorBookItem } from '../../lib/types';
 
 type Tab = 'list' | 'samples';
@@ -26,8 +26,8 @@ export function ErrorBookPage() {
     setLoading(true);
     try {
       const [list, sampleList] = await Promise.all([
-        api.get<ErrorBookItem[]>('/errorbook'),
-        api.get<ErrorBookItem[]>('/errorbook/samples'),
+        apiList.get<ErrorBookItem>('/errorbook'),
+        apiList.get<ErrorBookItem>('/errorbook/samples'),
       ]);
       setItems(list ?? []);
       setSamples(sampleList ?? []);

@@ -6,12 +6,12 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useResource } from '../../hooks/useResource';
-import { api } from '../../lib/api';
+import { api, apiList } from '../../lib/api';
 import type { WordCard } from '../../lib/types';
 
 export function WordCardPractice() {
   const { data, loading, error, reload } = useResource<WordCard[]>(
-    async () => api.get<WordCard[]>('/words'),
+    async () => apiList.get<WordCard>('/words'),
   );
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
