@@ -20,6 +20,9 @@ RUN pnpm install --no-frozen-lockfile --filter @eng-forge/api...
 
 COPY packages/ packages/
 COPY apps/api/ apps/api/
+# scripts/ 里含首装灌词库的 import-ecdict.mjs 与守卫脚本；data/ 里是随包样例词库
+COPY scripts/ scripts/
+COPY data/ data/
 
 # Stage 2: Production
 FROM node:22-alpine
@@ -45,6 +48,8 @@ COPY --from=builder /app/apps/api/tsconfig.json apps/api/tsconfig.json
 COPY --from=builder /app/apps/api/src/ apps/api/src/
 COPY --from=builder /app/apps/api/package.json apps/api/package.json
 COPY --from=builder /app/apps/api/docker-start.sh apps/api/docker-start.sh
+COPY --from=builder /app/scripts/ scripts/
+COPY --from=builder /app/data/ data/
 
 EXPOSE 3000
 # 🔴 用 tsx 直接跑 TS 源码：@eng-forge/contracts / @eng-forge/db 等 workspace 共享包

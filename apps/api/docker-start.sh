@@ -32,5 +32,16 @@ until pnpm exec tsx src/cli/migrate.ts; do
 done
 
 cd /app
+
+# ── 首装灌词库 ─────────────────────────────────────────────
+# 全新安装的库 word 表是空的，而前端没有词库管理入口，游戏 / 跟读 / 默写会集体
+# 报「词库为空」。这里在 word 表为空时灌入随包样例词库（data/sample-ecdict.csv）。
+# 幂等：已有词条时守卫脚本直接退出，只多一次 count 查询。
+# 失败不阻断启动：词库缺失不该让 api 起不来，日志里会写明。
+# 设 SEED_WORDS=0 可完全关闭（例如生产环境改用完整 ECDICT 手工灌入）。
+if [ "${SEED_WORDS:-1}" != "0" ]; then
+  pnpm exec tsx --tsconfig apps/api/tsconfig.json scripts/ensure-starter-words.mjs || echo "[start] 灌词步骤失败，继续启动" >&2
+fi
+
 # tsx 必须显式指向 apps/api/tsconfig.json（仓库根 tsconfig.base.json 不含 experimentalDecorators）
 exec pnpm exec tsx --tsconfig apps/api/tsconfig.json apps/api/src/main.ts
