@@ -310,14 +310,12 @@ export class UserService {
       return;
     }
 
-    // 插入绑定关系
-    await this.conn.db.insert(parentChildren).values({
-      parentId: scope.userId,
-      childId,
-      relation: input.relation,
-    });
-
-    // 记录知情同意日志
+    // 知情同意日志必须幂等，且**先于**绑定关系写入。
+    // consent_log 有 UNIQUE(child_id, agreement_version)：同一版协议对同一孩子只记录一次。
+    // 解绑后再绑同一个孩子时，上一条同意记录仍在，重复 insert 会撞唯一约束直接 500
+    // （2026-10-14 生产实测：parent_children 已提交、consent_log 才失败，用户看到 500
+    // 但绑定其实成功了，下次调用因上面的幂等检查直接返回 200 —— 状态与提示完全相反）。
+    // 同意是「事实」而非「每次绑定的事件」，撞约束直接跳过即可。
     await this.conn.db.insert(consentLog).values({
       childId,
       guardianId: scope.userId,
@@ -325,7 +323,16 @@ export class UserService {
       agreementHash: AGREEMENT_HASH,
       granted: ((input.agreed ?? true) ? 1 : 0) as unknown as boolean,
       source: 'settings',
-    });
+    }).onConflictDoNothing();
+
+    // 插入绑定关系。这里没有事务包裹，所以两次写入都必须自身不抛错，否则后半段失败会
+    // 留下「已写入一半」的半成品状态。上面 select 到 insert 之间存在并发窗口：两个并发
+    // 请求可能同时判定「未绑定」，第二个会撞 uq_parent_children_pair，同样用幂等兜底。
+    await this.conn.db.insert(parentChildren).values({
+      parentId: scope.userId,
+      childId,
+      relation: input.relation,
+    }).onConflictDoNothing();
   }
 
   /** POST /me/children/unbind —— 解绑孩子（家长角色） */

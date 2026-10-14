@@ -300,6 +300,32 @@ describe('POST /me/children/unbind —— 解绑', () => {
     expect(status).toBe(404);
     expect(body.code).toBe(ErrorCode.RESOURCE_NOT_FOUND);
   });
+
+  it('解绑后重新绑定应成功（回归：同意记录撞唯一约束导致 500）', async () => {
+    await register('rebind_target', Role.STUDENT);
+    const parent = await register('rebind_parent', Role.PARENT);
+
+    const first = await post('/me/children/bind', { username: 'rebind_target', agreed: true }, parent.token);
+    expect(first.status).toBe(200);
+
+    const listed = await listChildren(parent.token);
+    const childId = listed.body.data[0]?.childId;
+    expect(childId).toBeDefined();
+
+    const unbound = await post('/me/children/unbind', { childId }, parent.token);
+    expect(unbound.status).toBe(200);
+
+    // consent_log 有 UNIQUE(child_id, agreement_version)：解绑不会删除同意记录，
+    // 重新绑定时重复 insert 曾撞唯一约束抛 500，且当时 parent_children 已提交、
+    // 用户看到报错但实际已绑定。现在两次写入都幂等，必须稳定 200。
+    const rebound = await post('/me/children/bind', { username: 'rebind_target', agreed: true }, parent.token);
+    expect(rebound.status).toBe(200);
+    expect(rebound.body.code).toBe(ErrorCode.OK);
+
+    const after = await listChildren(parent.token);
+    expect(after.body.data).toHaveLength(1);
+    expect(after.body.data[0]?.username).toBe('rebind_target');
+  });
 });
 
 describe('GET /me/children —— 角色与隔离', () => {
