@@ -39,8 +39,15 @@ cd /app
 # 幂等：已有词条时守卫脚本直接退出，只多一次 count 查询。
 # 失败不阻断启动：词库缺失不该让 api 起不来，日志里会写明。
 # 设 SEED_WORDS=0 可完全关闭（例如生产环境改用完整 ECDICT 手工灌入）。
+#
+# 🔴 脚本必须放在 apps/api/scripts/ 而不是仓库根 scripts/：
+# 生产镜像是 `pnpm install --prod`，`@eng-forge/db` 的 workspace 符号链接只落在
+# /app/apps/api/node_modules 下，/app/node_modules 里没有。ESM 按导入文件自身路径
+# 向上找 node_modules，所以 /app/scripts/*.mjs 永远解析不到 @eng-forge/db
+# （ERR_MODULE_NOT_FOUND，2026-10-14 生产实测），挪到 apps/api/scripts/ 才能解析。
+# import-ecdict.mjs 用 resolve(process.cwd(), ...) 读 CSV，cwd 仍是 /app，不受影响。
 if [ "${SEED_WORDS:-1}" != "0" ]; then
-  pnpm exec tsx --tsconfig apps/api/tsconfig.json scripts/ensure-starter-words.mjs || echo "[start] 灌词步骤失败，继续启动" >&2
+  pnpm exec tsx --tsconfig apps/api/tsconfig.json apps/api/scripts/ensure-starter-words.mjs || echo "[start] 灌词步骤失败，继续启动" >&2
 fi
 
 # tsx 必须显式指向 apps/api/tsconfig.json（仓库根 tsconfig.base.json 不含 experimentalDecorators）

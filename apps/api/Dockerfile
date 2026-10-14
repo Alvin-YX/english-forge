@@ -48,6 +48,9 @@ COPY --from=builder /app/apps/api/tsconfig.json apps/api/tsconfig.json
 COPY --from=builder /app/apps/api/src/ apps/api/src/
 COPY --from=builder /app/apps/api/package.json apps/api/package.json
 COPY --from=builder /app/apps/api/docker-start.sh apps/api/docker-start.sh
+# apps/api/scripts/ 含首装灌词库守卫与 ECDICT 导入器，必须随包进生产阶段：
+# 它们 import @eng-forge/db，只能从 apps/api/ 下解析（见 docker-start.sh 的说明）。
+COPY --from=builder /app/apps/api/scripts/ apps/api/scripts/
 COPY --from=builder /app/scripts/ scripts/
 COPY --from=builder /app/data/ data/
 

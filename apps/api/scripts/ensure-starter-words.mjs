@@ -11,12 +11,17 @@
  * 失败语义：灌词失败不阻断 api 启动（词库是增强项），只打日志。
  *
  * 用法：
- *   ECF_SEED_CSV=data/ecdict.csv pnpm exec tsx scripts/ensure-starter-words.mjs
+ *   ECF_SEED_CSV=data/ecdict.csv pnpm exec tsx apps/api/scripts/ensure-starter-words.mjs
  * 不传 ECF_SEED_CSV 时走 import-ecdict.mjs 自身的回退：data/ecdict.csv 缺失则用
  * data/sample-ecdict.csv。
  *
- * 🔴 本仓库 scripts/*.mjs 一律是纯 JS：tsx 不会对 .mjs 剥离 TypeScript 类型标注，
- * 函数签名写 `(): Promise<number>` 会在容器里直接抛 SyntaxError 让整个启动灌词步骤崩掉
+ * 🔴 必须放在 apps/api/scripts/ 而非仓库根 scripts/：生产镜像是 `pnpm install --prod`，
+ * @eng-forge/db 的 workspace 符号链接只落在 apps/api/node_modules 下，根 node_modules 里没有。
+ * ESM 按导入文件自身路径向上查 node_modules，放在根 scripts/ 会 ERR_MODULE_NOT_FOUND
+ * （2026-10-14 生产实测）。
+ *
+ * 🔴 本仓库 *.mjs 一律是纯 JS：tsx 不会对 .mjs 剥离 TypeScript 类型标注，
+ * 函数签名写 `(): Promise<number>` 会直接抛 SyntaxError 让灌词步骤整体崩掉
  * （2026-10-14 生产实测）。要写类型就得把文件改成 .mts。
  */
 
@@ -50,7 +55,7 @@ async function main() {
   }
 
   console.log('[seed] word 表为空，执行 ECDICT 样例词库导入…');
-  const args = ['exec', 'tsx', '--tsconfig', 'apps/api/tsconfig.json', 'scripts/import-ecdict.mjs'];
+  const args = ['exec', 'tsx', '--tsconfig', 'apps/api/tsconfig.json', 'apps/api/scripts/import-ecdict.mjs'];
   const csv = process.env.ECF_SEED_CSV;
   if (csv) args.push('--file', csv);
 

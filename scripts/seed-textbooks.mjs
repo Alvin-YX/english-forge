@@ -13,7 +13,7 @@
  *
  * 环境变量：DATABASE_URL / DB_DIALECT
  *
- * 依赖：需先跑 `npx tsx scripts/import-ecdict.mjs` 才有词条可分配；
+ * 依赖：需先跑 `npx tsx apps/api/scripts/import-ecdict.mjs` 才有词条可分配；
  *       不带 `--sample-words` 时只建骨架，不写 word_unit。
  */
 

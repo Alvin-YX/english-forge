@@ -7,7 +7,7 @@
  *    `source_url` 追溯信息，与 `packages/db/src/schema/content.ts` 的 NOT NULL 约束对齐。
  *
  * 用法（须通过 tsx 运行，因为需要加载 packages/db 的 TypeScript schema）：
- *   npx tsx scripts/import-ecdict.mjs [--file <path>] [--limit N] [--reset] [--dry-run]
+ *   npx tsx apps/api/scripts/import-ecdict.mjs [--file <path>] [--limit N] [--reset] [--dry-run]
  *
  * 环境变量：
  *   DATABASE_URL  —— PG 档 `postgres://…` 或 SQLite 档 `file:./data/forge.db`
@@ -16,7 +16,13 @@
  * 典型工作流：
  *   1. 下载 https://github.com/skywind3000/ECDICT-ultimate 的 stardict.csv（约 43 万词条）
  *   2. 放到 `./data/ecdict.csv`
- *   3. 执行 `npx tsx scripts/import-ecdict.mjs`
+ *   3. 执行 `npx tsx apps/api/scripts/import-ecdict.mjs`
+ *
+ * 🔴 本文件与 ensure-starter-words.mjs 必须住在 apps/api/scripts/ 而不是仓库根 scripts/：
+ * 生产镜像是 `pnpm install --prod`，会跳过根 package.json 的 devDependencies，
+ * 于是 /app/node_modules 下没有 @eng-forge/db 的符号链接；ESM 按导入文件自身路径
+ * 向上查 node_modules，放在根 scripts/ 会 ERR_MODULE_NOT_FOUND。放在 apps/api/ 下
+ * 才能解析到 apps/api/node_modules 里的那份。
  */
 
 import { readFileSync, existsSync } from 'node:fs';
