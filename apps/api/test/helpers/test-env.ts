@@ -27,6 +27,15 @@ export const TEST_ACCESS_SECRET = 'test-access-secret-minimum-32-chars!!!';
 export const TEST_REFRESH_SECRET = 'test-refresh-secret-minimum-32-chars!!!';
 export const TEST_ISSUER = 'english-forge-test';
 
+/**
+ * 测试用主密钥：`APP_SECRET_MASTER_KEY` 要求 base64 解码后恰好 32 字节。
+ * 值本身无安全含义（测试库是临时库，测完即删）。
+ *
+ * 🔴 不设它时服务照样能启动，但 `AppSecretStore.set()` 会抛裸 Error，
+ *    导致所有写密钥的断言变成 500 —— 这里必须给。
+ */
+export const TEST_MASTER_KEY = 'MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=';
+
 /** 组装一套可用的测试环境变量 */
 export function setupTestEnv(sqliteFile: string): Record<string, string> {
   return {
@@ -39,6 +48,7 @@ export function setupTestEnv(sqliteFile: string): Record<string, string> {
     JWT_ISSUER: TEST_ISSUER,
     JWT_ACCESS_TTL_SEC: '900',
     JWT_REFRESH_TTL_DAY: '30',
+    APP_SECRET_MASTER_KEY: TEST_MASTER_KEY,
     CORS_ORIGINS: '*',
     BODY_LIMIT: '2mb',
     MEDIA_ROOT: tmpdir(),

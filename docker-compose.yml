@@ -26,6 +26,11 @@ services:
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET:-change-me-in-production}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-change-me-in-production}
       - JWT_ISSUER=english-forge
+      # 🔴 必填：`app_secret` 表的 AES-256-GCM 主密钥（base64 编码的 32 字节）。
+      # 缺省时服务仍能启动，但保存 API Key 会 500；`pnpm --filter @eng-forge/api
+      # exec tsx scripts/gen-master-key.mjs` 可生成一个。
+      # ⚠️ 一旦写入，丢失此值会让存量密钥永久无法解密，必须随备份一起保管。
+      - APP_SECRET_MASTER_KEY=${APP_SECRET_MASTER_KEY:-}
       - CORS_ORIGINS=*
       - MEDIA_ROOT=/data/media
       - SPEECH_URL=http://speech:8001

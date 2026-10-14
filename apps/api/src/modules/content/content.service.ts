@@ -21,7 +21,7 @@ import { z } from 'zod';
 
 import { notFoundError } from '../../common/errors.business.js';
 import { DbConnection } from '../../infra/db/db.module.js';
-import { and, asc, count, desc, eq, ilike, or, type sql } from '../../infra/db/query.js';
+import { and, asc, count, desc, eq, ilike, or, type SQL } from '../../infra/db/query.js';
 
 // ═══════════════════════════════════════════════════════════
 // View 类型（API 边界形状，不含内部列 embedding / searchTsv 等）
@@ -43,6 +43,8 @@ export interface WordListView {
   audioUkPath?: string;
   audioUsPath?: string;
   examTags: string[];
+  /** 软删标志：公开列表恒为 true，管理后台可见 false */
+  isActive: boolean;
 }
 
 /** 词条详情视图 */
@@ -112,12 +114,24 @@ const PAGE_SIZE_MAX = 100;
 export class ContentService {
   constructor(@Inject(DbConnection) private readonly conn: DbConnection) {}
 
-  /** 词条列表（公共数据，可选搜索/过滤/分页） */
-  async listWords(query: ListWordsQuery): Promise<{ items: WordListView[]; total: number; page: number; pageSize: number; totalPages: number }> {
+  /**
+   * 词条列表（公共数据，可选搜索/过滤/分页）。
+   *
+   * 🔴 `includeInactive`：管理后台需要看到已停用的词条；
+   *    公开列表（`content.controller.ts`）走默认分支，**只返回活跃词条**。
+   *
+   * 🔴 `sortDir` 修复：该参数此前被 zod 解析后从未使用（恒按升序），
+   *    管理后台的「按更新时间倒序」依赖它，故在此真正生效。
+   */
+  async listWords(
+    query: ListWordsQuery,
+    options: { includeInactive?: boolean } = {},
+  ): Promise<{ items: WordListView[]; total: number; page: number; pageSize: number; totalPages: number }> {
     const page = query.page;
     const pageSize = Math.min(query.pageSize, PAGE_SIZE_MAX);
+    const dir = query.sortDir === 'desc' ? desc : asc;
 
-    const conditions: ReturnType<typeof sql>[] = [];
+    const conditions: SQL[] = [];
 
     // 搜索：headword / lemma / translationZh 模糊匹配
     if (query.search) {
@@ -146,8 +160,10 @@ export class ContentService {
       conditions.push(eq(word.cefrLevel, query.cefrLevel));
     }
 
-    // 仅活跃词条
-    conditions.push(eq(word.isActive, true));
+    // 仅活跃词条（管理后台可显式要求包含停用项）
+    if (!options.includeInactive) {
+      conditions.push(eq(word.isActive, true));
+    }
 
     // 按单元过滤：通过 word_unit 联表
     if (query.unitId) {
@@ -156,15 +172,14 @@ export class ContentService {
 
     const where = and(...conditions);
 
-    // 排序
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let orderBy: any[];
+    // 排序（`sortDir` 对主排序键生效，二级键恒升序保证分页稳定）
+    let orderBy: SQL[];
     if (query.sortBy === 'frequency') {
-      orderBy = [asc(word.frequencyRank), asc(word.headword)];
+      orderBy = [dir(word.frequencyRank), asc(word.headword)];
     } else if (query.sortBy === 'updatedAt') {
-      orderBy = [desc(word.updatedAt), asc(word.headword)];
+      orderBy = [dir(word.updatedAt), asc(word.headword)];
     } else {
-      orderBy = [asc(word.headword), asc(word.pos)];
+      orderBy = [dir(word.headword), asc(word.pos)];
     }
 
     // 先查总数
@@ -194,6 +209,7 @@ export class ContentService {
         audioUkPath: word.audioUkPath,
         audioUsPath: word.audioUsPath,
         examTags: word.examTags,
+        isActive: word.isActive,
         sortOrder: wordUnit.sortOrder,
         isRequired: wordUnit.isRequired,
       })
@@ -219,6 +235,7 @@ export class ContentService {
       audioUkPath: row.audioUkPath ?? undefined,
       audioUsPath: row.audioUsPath ?? undefined,
       examTags: row.examTags ?? [],
+      isActive: row.isActive,
     }));
 
     return { items, total, page, pageSize, totalPages };
@@ -243,6 +260,7 @@ export class ContentService {
         audioUkPath: word.audioUkPath,
         audioUsPath: word.audioUsPath,
         examTags: word.examTags,
+        isActive: word.isActive,
         source: word.source,
         createdAt: word.createdAt,
       })
@@ -270,6 +288,7 @@ export class ContentService {
       audioUkPath: row.audioUkPath ?? undefined,
       audioUsPath: row.audioUsPath ?? undefined,
       examTags: row.examTags ?? [],
+      isActive: row.isActive,
       frequencyRank: row.frequencyRank ?? undefined,
       source: row.source,
       createdAt: row.createdAt.toISOString(),
@@ -281,7 +300,7 @@ export class ContentService {
     const page = query.page;
     const pageSize = Math.min(query.pageSize, 50);
 
-    const conditions: ReturnType<typeof sql>[] = [];
+    const conditions: SQL[] = [];
 
     if (query.wordId) {
       // 通过 word_unit 和 sentence_unit 找不到直接关联，
@@ -393,6 +412,7 @@ export class ContentService {
         audioUkPath: word.audioUkPath,
         audioUsPath: word.audioUsPath,
         examTags: word.examTags,
+        isActive: word.isActive,
         sortOrder: wordUnit.sortOrder,
         isRequired: wordUnit.isRequired,
       })
@@ -416,6 +436,7 @@ export class ContentService {
       audioUkPath: row.audioUkPath ?? undefined,
       audioUsPath: row.audioUsPath ?? undefined,
       examTags: row.examTags ?? [],
+      isActive: row.isActive,
       sortOrder: row.sortOrder,
       isRequired: row.isRequired,
     }));

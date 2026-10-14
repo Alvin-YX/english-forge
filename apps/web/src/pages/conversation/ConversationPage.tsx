@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Spinner } from '../../components/ui/Spinner';
 import { api } from '../../lib/api';
-import type { ConversationView, MessageView, PaginatedResponse } from '../../lib/types';
+import type { ChatReplyView, ConversationView, MessageView, PaginatedResponse } from '../../lib/types';
 
 const MODES = [
   { value: 'chat', label: '日常闲聊', icon: '💬' },
@@ -53,6 +53,8 @@ export function ConversationPage() {
   const [creating, setCreating] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  /** AI 降级提示（后端返回 `degraded: true` 时的原因），持久显示直到下一次成功回复 */
+  const [aiNotice, setAiNotice] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -81,6 +83,7 @@ export function ConversationPage() {
     }
     setLoading(true);
     setErrorMsg(null);
+    setAiNotice(null);
     (async () => {
       try {
         const [conv, msgs] = await Promise.all([
@@ -122,39 +125,38 @@ export function ConversationPage() {
     setTyping(true);
     setInput('');
     try {
-      // Optimistic append
-      const optimistic: MessageView = {
-        id: -1,
-        conversationId: Number(conversationId),
-        seq: (messages.length ? Math.max(...messages.map((m) => m.seq)) : 0) + 1,
-        role: 'user',
-        content,
-        inputType: 'text',
-        filtered: false,
-        createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, optimistic]);
-
-      // Send to server
-      const sent = await api.post<MessageView>(
-        '/conversations/' + conversationId + '/messages',
-        { role: 'user', content, inputType: 'text' },
+      // 走 `/chat`：AI 回复由服务端生成（不走 `/messages`，那个接口只能写入客户端自报的记录）
+      const reply = await api.post<ChatReplyView>(
+        '/conversations/' + conversationId + '/chat',
+        { content },
       );
-      setMessages((prev) => prev.map((m) => (m.id === -1 ? sent : m)));
 
-      // Update turn count locally
+      // 服务端已落库用户消息，这里一次性追加真实记录
+      setMessages((prev) => {
+        const next = [...prev, reply.userMessage];
+        if (reply.assistantMessage) next.push(reply.assistantMessage);
+        return next;
+      });
+
+      if (reply.degraded) {
+        // 用户消息已保存，只是 AI 没答上来：给出可读原因而不是静默失败
+        setAiNotice(reply.reason ?? 'AI 当前不可用');
+      } else {
+        setAiNotice(null);
+      }
+
       if (current) {
         setCurrent({ ...current, turnCount: current.turnCount + 1 });
       }
+      void loadList();
     } catch (err) {
-      setMessages((prev) => prev.filter((m) => m.id !== -1));
-      setErrorMsg((err as Error).message || '发送失败，请重试');
       setInput(content);
+      setErrorMsg((err as Error).message || '发送失败，请重试');
     } finally {
       setSending(false);
       setTyping(false);
     }
-  }, [input, conversationId, sending, messages, current]);
+  }, [input, conversationId, sending, current, loadList]);
 
   const handleCreate = useCallback(async () => {
     if (creating) return;
@@ -305,6 +307,21 @@ export function ConversationPage() {
           {errorMsg ? (
             <div className="rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700">
               {errorMsg}
+            </div>
+          ) : null}
+
+          {aiNotice ? (
+            <div className="flex items-start gap-2 rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm text-warning-700">
+              <span aria-hidden>⚠️</span>
+              <span className="flex-1">AI 未能回复：{aiNotice}</span>
+              <button
+                type="button"
+                onClick={() => setAiNotice(null)}
+                className="shrink-0 text-warning-500 hover:text-warning-700"
+                aria-label="关闭提示"
+              >
+                ✕
+              </button>
             </div>
           ) : null}
 

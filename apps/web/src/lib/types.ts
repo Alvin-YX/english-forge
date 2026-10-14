@@ -199,3 +199,92 @@ export interface PaginatedResponse<T> {
   pageSize: number;
   totalPages: number;
 }
+
+// ── Admin: 大模型配置 ──
+// 严格对齐 `apps/api` 的 `LlmConfigView` / `LlmTestResult` / 预设接口。
+export type LlmProvider = 'openai' | 'deepseek' | 'qwen' | 'custom';
+
+export interface LlmProviderPreset {
+  baseUrl: string;
+  model: string;
+  label: string;
+}
+
+export interface LlmPresetsView {
+  presets: Partial<Record<LlmProvider, LlmProviderPreset>>;
+  timeoutDefaultMs: number;
+  timeoutMinMs: number;
+  timeoutMaxMs: number;
+}
+
+export interface LlmConfigView {
+  provider: LlmProvider;
+  model: string;
+  baseUrl: string;
+  timeoutMs: number;
+  hasKey: boolean;
+  /** 末 4 位掩码，如 `****abcd`；未设置 Key 时为 null。永不是明文。 */
+  keyHint: string | null;
+  updatedAt: string | null;
+}
+
+export interface LlmConfigViewWithEnv extends LlmConfigView {
+  /** 服务器是否配置了 `APP_SECRET_MASTER_KEY`（false 时无法加密保存 Key） */
+  hasMasterKey: boolean;
+  /** 供展示的补密钥指引；`hasMasterKey` 为 true 时缺省 */
+  masterKeyHint?: string;
+}
+
+export interface LlmTestResult {
+  ok: boolean;
+  latencyMs?: number;
+  model?: string;
+  totalTokens?: number;
+  error?: string;
+  reason?: 'timeout' | 'quota' | 'unreachable';
+}
+
+// ── Admin: 词库管理 ──
+/** 对齐后端 `WordListView`（管理视图比公开视图多一个 `isActive`） */
+export interface AdminWordView {
+  id: number;
+  headword: string;
+  lemma: string;
+  phoneticUk?: string;
+  phoneticUs?: string;
+  pos?: string;
+  translationZh: string;
+  definitionEn?: string;
+  frequencyBand?: string;
+  cefrLevel?: string;
+  isVerb: boolean;
+  audioUkPath?: string;
+  audioUsPath?: string;
+  examTags: string[];
+  isActive: boolean;
+}
+
+export interface WordImportResult {
+  inserted: number;
+  conflicts: number;
+  duplicates: number;
+  invalid: number;
+  totalRows: number;
+  license: string;
+  source: string;
+}
+
+export interface WordActiveResult {
+  requested: number;
+  updated: number;
+  isActive: boolean;
+}
+
+/** `POST /conversations/:id/chat` 的返回：AI 不可用时降级返回而非报错 */
+export interface ChatReplyView {
+  userMessage: MessageView;
+  assistantMessage: MessageView | null;
+  degraded: boolean;
+  reason?: string;
+  code?: string | number;
+}

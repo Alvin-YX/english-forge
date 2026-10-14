@@ -139,6 +139,8 @@ export const AUDIT_ACTIONS = [
   // ── 本次补齐（04 文档）──
   /** §7.7 性能档位自动降档 */
   'system_tier_change',
+  /** 管理后台改动系统级配置（AI 引擎参数、词库写操作等） */
+  'system_config_change',
   /** §9.2 出网调用（云 API / TTS / 翻译） */
   'egress_call',
   /** 数据导出/删除（遗忘权，PIPL） */
@@ -209,6 +211,20 @@ export const appConfig = pgTable('app_config', {
 export const CONFIG_KEY_EGRESS_ALLOWLIST = 'security.egress_allowlist';
 /** 默认性能档位配置键（§7.7） */
 export const CONFIG_KEY_DEFAULT_PERF_TIER = 'speech.default_perf_tier';
+
+// ── LLM 配置（§9.3 敏感/非敏感分工）────────────────────────
+/** 非敏感项一律走 `app_config`（明文），敏感项走 `app_secret`（只存密文） */
+export const CONFIG_KEY_LLM_PROVIDER = 'llm.provider';
+export const CONFIG_KEY_LLM_MODEL = 'llm.model';
+export const CONFIG_KEY_LLM_BASE_URL = 'llm.base_url';
+export const CONFIG_KEY_LLM_TIMEOUT_MS = 'llm.timeout_ms';
+/** API Key 在 `app_secret` 表里的 name（唯一持密文读写权的地方见 app-secret.store.ts） */
+export const SECRET_KEY_LLM_API = 'cloud.llm.api_key';
+
+/** `llm.provider` 的合法取值。provider 只是前端预设选择器的标识，
+ *  真正决定请求去向的是 `llm.base_url` —— 所有商用服务都兼容 OpenAI 协议 */
+export const LLM_PROVIDERS = ['openai', 'deepseek', 'qwen', 'custom'] as const;
+export type LlmProvider = (typeof LLM_PROVIDERS)[number];
 
 // ═══════════════════════════════════════════════════════════
 // app_secret（🔴 文档缺陷补齐）

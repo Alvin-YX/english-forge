@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { PageLoader } from '../../components/common/PageLoader';
+import { RequireRole } from '../../components/common/RequireRole';
 import { StateView } from '../../components/common/StateView';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -44,7 +45,6 @@ interface Notice {
 
 export function ParentDashboard() {
   const role = useAuthStore((s) => s.user?.role);
-  const isParent = role === 'parent';
 
   const { data, loading, error, reload } = useResource<ChildView[]>(
     () => api.get<ChildView[]>('/me/children'),
@@ -148,16 +148,13 @@ export function ParentDashboard() {
       </div>
 
       {/* 非家长角色：不展示加载/错误态，避免误读成服务故障 */}
-      {!isParent ? (
-        <Card>
-          <StateView
-            icon="🔒"
-            tone="muted"
-            title="该页面仅家长角色可用"
-            message="当前账号不是家长角色。请用家长账号注册并登录后访问。"
-          />
-        </Card>
-      ) : loading ? (
+      <RequireRole
+        userRole={role}
+        allowed={['parent']}
+        fallbackTitle="该页面仅家长角色可用"
+        fallbackMessage="当前账号不是家长角色。请用家长账号注册并登录后访问。"
+      >
+      {loading ? (
         <PageLoader message="正在加载孩子档案…" />
       ) : error ? (
         <Card>
@@ -345,6 +342,7 @@ export function ParentDashboard() {
           </p>
         </>
       )}
+      </RequireRole>
     </div>
   );
 }

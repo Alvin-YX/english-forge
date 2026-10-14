@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
 import { AchievementsPage } from './pages/achievements/AchievementsPage';
+import { AiSettingsPage } from './pages/admin/AiSettingsPage';
+import { VocabularyPage } from './pages/admin/VocabularyPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { ConversationPage } from './pages/conversation/ConversationPage';
@@ -55,6 +57,8 @@ export default function App() {
         <Route path="/reports" element={<ReportPage />} />
         <Route path="/achievements" element={<AchievementsPage />} />
         <Route path="/parent/dashboard" element={<ParentDashboard />} />
+        <Route path="/a/ai" element={<AiSettingsPage />} />
+        <Route path="/a/vocabulary" element={<VocabularyPage />} />
         <Route path="/profile" element={<ProfilePage />} />
       </Route>
 

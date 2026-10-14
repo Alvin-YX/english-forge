@@ -23,6 +23,22 @@ export const REFRESH_TTL_DEFAULT_DAY = 30;
 /** fnOS 数据卷默认媒体根目录（03 文档 §7.2 卷路径约定） */
 export const MEDIA_ROOT_DEFAULT = '/vol1/1000/EnglishForge/media';
 
+/**
+ * 把空字符串视作「未设置」。
+ *
+ * 🔴 为什么必须有这一层：`docker-compose.yml` 用 `${VAR:-}` 的写法，宿主机上
+ *    **没有设置**的变量会被展开成**空字符串**传进容器（而不是不设置）。
+ *    而 zod 的 `.optional()` 只放过 `undefined`，放过不了 `''`。
+ *    于是 `AI_URL=${AI_URL:-}` 这种「可选、通常不设」的配置会让
+ *    `z.string().url().optional()` 在启动期直接校验失败、容器起不来 ——
+ *    一个「留空」的配置项变成阻断启动的故障，比「真的没配」难查得多。
+ *
+ * 只对可选字段用；必填字段保持严格（空串就是漏配，必须报错）。
+ */
+function emptyToUndefined(value: unknown): unknown {
+  return typeof value === 'string' && value.trim() === '' ? undefined : value;
+}
+
 export const ENV_SCHEMA = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   // 🔴 `min(0)`：`PORT=0` 是 Node/测试的"随机端口"惯例，允许它启动后自行取一个空闲端口
@@ -33,7 +49,7 @@ export const ENV_SCHEMA = z.object({
 
   // ── 数据库（03 文档 §8.1 双方言）──────────────────────────
   DATABASE_URL: z.string().min(1),
-  DB_DIALECT: z.enum(['postgres', 'sqlite']).optional(),
+  DB_DIALECT: z.preprocess(emptyToUndefined, z.enum(['postgres', 'sqlite']).optional()),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(20),
 
   // ── JWT ──────────────────────────────────────────────────
@@ -49,14 +65,14 @@ export const ENV_SCHEMA = z.object({
    * base64 编码的 32 字节密钥，等价于 `key_version = 1`。
    * M2 不调用云端，缺省允许启动；调用 `AppSecretStore` 时才会报错。
    */
-  APP_SECRET_MASTER_KEY: z.string().min(32).optional(),
+  APP_SECRET_MASTER_KEY: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
   /**
    * 多版本主密钥：JSON 对象 `{"1": "<base64>", "2": "<base64>"}`。
    * 轮换时新版本写入用新 key，存量记录按各自 `key_version` 选对应 key 解密。
    * 用 JSON 而非 `APP_SECRET_MASTER_KEY_V2` 这类散列变量，是为了让「哪些版本可用」
    * 在启动时**一次性**校验清楚，而不是逐个 key 探测。
    */
-  APP_SECRET_MASTER_KEYS: z.string().optional(),
+  APP_SECRET_MASTER_KEYS: z.preprocess(emptyToUndefined, z.string().optional()),
 
   // ── 密码哈希（03 文档 §8.6：argon2id m=64MB,t=3,p=4）──────
   ARGON2_MEMORY_KB: z.coerce.number().int().min(256).default(65536),
@@ -70,6 +86,20 @@ export const ENV_SCHEMA = z.object({
 
   // ── 媒体 ─────────────────────────────────────────────────
   MEDIA_ROOT: z.string().min(1).default(MEDIA_ROOT_DEFAULT),
+
+  // ── 外部服务 ─────────────────────────────────────────────
+  /**
+   * 内部 Python `ai` 服务地址。
+   *
+   * 🔶 目前**未被任何代码使用**：LLM 调用由 NestJS 直连 OpenAI 兼容端点完成
+   *    （见 `modules/conversation/llm.service.ts`），因为 `app_secret` 与
+   *    `reveal()` 都在 NestJS 侧，直连才能保证单一密钥持有方。
+   *
+   * 声明在这里而不是留在 compose 里"悬空"，是因为 zod 是 strip 模式：
+   * compose 里配了而 schema 里没有的变量会被静默丢弃，排障时极易误判为
+   * "配置了但没生效"。
+   */
+  AI_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
 });
 
 export type Env = z.infer<typeof ENV_SCHEMA>;

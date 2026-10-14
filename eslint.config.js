@@ -147,7 +147,11 @@ export default [
 
   // ── 配置与脚本文件（Node 环境）────────────────────────────
   {
-    files: ['*.js', '*.mjs', '*.cjs', 'ops/scripts/**/*.mjs'],
+    // 🔴 必须写成 `**/*`：flat config 的 files 模式不带目录分隔符时只匹配仓库根一层，
+    //    裸 `*.mjs` 覆盖不到 `apps/api/scripts/*.mjs`（灌词脚本、主密钥生成脚本），
+    //    于是 `console`/`process` 全报 `no-undef`，`pnpm lint` 常年是红的、
+    //    真正的 lint 问题反而被淹没。
+    files: ['**/*.js', '**/*.mjs', '**/*.cjs', 'ops/scripts/**/*.mjs'],
     languageOptions: {
       globals: { ...globals.node },
     },

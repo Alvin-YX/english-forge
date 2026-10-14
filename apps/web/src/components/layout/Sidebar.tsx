@@ -31,6 +31,12 @@ const otherNav: NavItem[] = [
   { to: '/profile', label: '我的', icon: '⚙️' },
 ];
 
+/** 仅管理员可见（渲染条件见下方 `user?.role === 'admin'`） */
+const adminNav: NavItem[] = [
+  { to: '/a/ai', label: 'AI 设置', icon: '🔌' },
+  { to: '/a/vocabulary', label: '词库管理', icon: '📚' },
+];
+
 const gamesNav: NavItem[] = [
   { to: '/game/word-shooter', label: '单词射击', icon: '🎯' },
   { to: '/game/spell-truck', label: '拼写卡车', icon: '🚛' },
@@ -93,6 +99,15 @@ export function Sidebar() {
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">更多</p>
           <NavGroup items={otherNav} />
         </div>
+
+        {/* 管理组按角色决定是否渲染：非管理员连入口都看不到，
+            页面内的 RequireRole 再兜住直接粘贴 URL 的越权访问 */}
+        {user?.role === 'admin' ? (
+          <div>
+            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">管理</p>
+            <NavGroup items={adminNav} />
+          </div>
+        ) : null}
       </div>
 
       {user ? (

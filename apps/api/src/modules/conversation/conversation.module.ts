@@ -7,12 +7,17 @@
 
 import { Module } from '@nestjs/common';
 
+import { AiModule } from '../../infra/ai/ai.module.js';
+import { AuditModule } from '../../infra/audit/audit.module.js';
+
 import { ConversationController } from './conversation.controller.js';
 import { ConversationService } from './conversation.service.js';
+import { LlmService } from './llm.service.js';
 
 @Module({
+  imports: [AuditModule, AiModule],
   controllers: [ConversationController],
-  providers: [ConversationService],
-  exports: [ConversationService],
+  providers: [ConversationService, LlmService],
+  exports: [ConversationService, LlmService],
 })
 export class ConversationModule {}

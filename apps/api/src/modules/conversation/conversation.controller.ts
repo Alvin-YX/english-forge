@@ -20,10 +20,13 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 
 import { zodPipe } from '../../common/zod-validation.pipe.js';
+import { type AuditMeta, CurrentAuditMeta } from '../../infra/audit/audit-meta.decorator.js';
 import { CurrentUser } from '../../infra/profile/current-user.decorator.js';
 import { type ProfileScope } from '../../infra/profile/profile-scope.js';
 
 import {
+  type ChatInput,
+  type ChatView,
   type ConversationView,
   type CreateConversationInput,
   type ListConversationsQuery,
@@ -31,6 +34,7 @@ import {
   type MessageView,
   type SendMessageInput,
   ConversationService,
+  CHAT_SCHEMA,
   CREATE_CONVERSATION_SCHEMA,
   LIST_CONVERSATIONS_QUERY_SCHEMA,
   LIST_MESSAGES_QUERY_SCHEMA,
@@ -56,6 +60,27 @@ export class ConversationController {
     @Body(zodPipe(CREATE_CONVERSATION_SCHEMA)) body: CreateConversationInput,
   ): Promise<ConversationView> {
     return this.service.createConversation(scope, body);
+  }
+
+  /**
+   * POST /conversations/:conversationId/chat —— 一次真实的 AI 往返
+   *
+   * 与 `POST /messages` 的分工：`/messages` 是「写入一条已生成的记录」
+   * （历史遗留的聊天记录本契约，客户端自报 role/tokens）；
+   * `/chat` 是「我说一句，AI 回一句」，AI 回复由服务端生成，客户端无法伪造。
+   *
+   * 🔴 AI 不可用时**不抛错**：返回 `degraded: true` + `reason`，
+   * 用户消息已落库，前端据此提示「AI 未配置，请到管理后台设置」。
+   */
+  @Post(':conversationId/chat')
+  @ApiOperation({ summary: '发送消息并获取 AI 回复（失败时降级返回，不 500）' })
+  async chat(
+    @CurrentUser() scope: ProfileScope,
+    @CurrentAuditMeta() meta: AuditMeta,
+    @Param('conversationId', zodPipe(POSITIVE_INT)) conversationId: number,
+    @Body(zodPipe(CHAT_SCHEMA)) body: ChatInput,
+  ): Promise<ChatView> {
+    return this.service.chat(scope, conversationId, body, meta);
   }
 
   /** GET /conversations —— 对话列表 */

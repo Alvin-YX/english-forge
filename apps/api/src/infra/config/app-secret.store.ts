@@ -100,6 +100,19 @@ export class AppSecretStore {
     this.keys = loadMasterKeys(env);
   }
 
+  /**
+   * 是否已配置任何版本的主密钥。
+   *
+   * 🔴 为什么需要这个方法：`APP_SECRET_MASTER_KEY` 未设置时 `loadMasterKeys()`
+   *    返回空 Map（**不抛错**，服务能正常启动），而 `set()` 内部 `keyOf(1)`
+   *    会抛裸 `Error` → 直接 500。调用方应先读本方法，给出「请先配置主密钥」
+   *    这种可操作的提示，而不是让管理员看到一坨栈信息。
+   *    `reveal()` / `exists()` / `remove()` 不受影响。
+   */
+  hasMasterKey(): boolean {
+    return this.keys.size > 0;
+  }
+
   /** 写入/覆盖一条密钥（调用方传明文，本方法内部立即加密落库） */
   async set(name: string, provider: string, plaintext: string, options: AppSecretSetOptions = {}): Promise<void> {
     const version = options.keyVersion ?? this.latestVersion();

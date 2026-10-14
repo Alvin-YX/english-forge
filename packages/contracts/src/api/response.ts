@@ -63,6 +63,7 @@ export const ErrorCode = {
   LLM_NOT_CONFIGURED: 4005, // 未配置 API Key
   LLM_PARSE_FAILED: 4006,
   CONVERSATION_MODE_INVALID: 4007,
+  LLM_CONFIG_INVALID: 4008, // 配置存在但不可用（如未配置主密钥导致无法加密 Key）
 
   // ── 5xxx 统计与报告 ──────────────────────────────────────
   STATS_NOT_READY: 5001,

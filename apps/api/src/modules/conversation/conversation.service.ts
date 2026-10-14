@@ -15,7 +15,7 @@
  *   - aiMessage.filtered 记录安全过滤命中
  */
 
-import { ErrorCode } from '@eng-forge/contracts/api';
+import { ErrorCode, type ErrorCodeValue } from '@eng-forge/contracts/api';
 import {
   aiConversation,
   aiMessage,
@@ -30,10 +30,14 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
-import { internalInvariantError, notFoundError } from '../../common/errors.business.js';
+import { BusinessError, internalInvariantError, notFoundError } from '../../common/errors.business.js';
+import { type AuditMeta } from '../../infra/audit/audit-meta.decorator.js';
+import { AuditService } from '../../infra/audit/audit.service.js';
 import { DbConnection } from '../../infra/db/db.module.js';
 import { and, asc, count, desc, eq, type SQL, sql } from '../../infra/db/query.js';
 import { profileWhere, type ProfileScope } from '../../infra/profile/profile-scope.js';
+
+import { buildChatMessages, LlmService } from './llm.service.js';
 
 // ═══════════════════════════════════════════════════════════
 // View 类型
@@ -121,10 +125,33 @@ export const LIST_MESSAGES_QUERY_SCHEMA = z.object({
   pageSize: z.coerce.number().int().positive().max(100).optional().default(50),
 });
 
+/**
+ * 🔴 新增端点而不是复用 `SEND_MESSAGE_SCHEMA`：那条 schema 让客户端自己声明
+ *    `role`/`tokens`/`latencyMs`，是「聊天记录本」的语义。`chat()` 的语义是
+ *    「我说一句话，AI 回我一句」，客户端不该（也不能）声明 assistant 的内容。
+ */
+export const CHAT_SCHEMA = z.object({
+  content: z.string().trim().min(1).max(2000),
+});
+
+export interface ChatView {
+  /** 用户消息（已落库，即使 AI 调用失败也不丢） */
+  userMessage: MessageView;
+  /** AI 回复；失败时为 `null`，同时 `degraded: true` */
+  assistantMessage: MessageView | null;
+  /** AI 调用是否降级（未配置 / 超时 / 不可达 / 额度不足） */
+  degraded: boolean;
+  /** 降级原因（用户可读，前端可直接展示） */
+  reason?: string;
+  /** 降级对应的业务错误码，前端据此精确分支 */
+  code?: ErrorCodeValue;
+}
+
 export type CreateConversationInput = z.infer<typeof CREATE_CONVERSATION_SCHEMA>;
 export type ListConversationsQuery = z.infer<typeof LIST_CONVERSATIONS_QUERY_SCHEMA>;
 export type SendMessageInput = z.infer<typeof SEND_MESSAGE_SCHEMA>;
 export type ListMessagesQuery = z.infer<typeof LIST_MESSAGES_QUERY_SCHEMA>;
+export type ChatInput = z.infer<typeof CHAT_SCHEMA>;
 
 // ═══════════════════════════════════════════════════════════
 // 常量
@@ -132,13 +159,22 @@ export type ListMessagesQuery = z.infer<typeof LIST_MESSAGES_QUERY_SCHEMA>;
 
 const PAGE_SIZE_MAX = 100;
 
+/** `system` 角色不进入 LLM 上下文（本表的 system 消息是本地规则产生的，不是模型提示） */
+function isChatRole(row: AiMessageRow): row is AiMessageRow & { role: 'user' | 'assistant' } {
+  return row.role === 'user' || row.role === 'assistant';
+}
+
 // ═══════════════════════════════════════════════════════════
 // Service
 // ═══════════════════════════════════════════════════════════
 
 @Injectable()
 export class ConversationService {
-  constructor(@Inject(DbConnection) private readonly conn: DbConnection) {}
+  constructor(
+    @Inject(DbConnection) private readonly conn: DbConnection,
+    @Inject(LlmService) private readonly llm: LlmService,
+    @Inject(AuditService) private readonly audit: AuditService,
+  ) {}
 
   // ═══════════════════════════════════════════════════════════
   // 私有辅助：验证对话归属
@@ -167,6 +203,177 @@ export class ConversationService {
 
     if (conv === undefined) {
       throw notFoundError(ErrorCode.CONVERSATION_NOT_FOUND, '对话不存在');
+    }
+  }
+
+  /** 读取当前档案的对话行（`chat()` 需要 `persona` / `level` 组系统提示） */
+  private async getOwnedConversation(scope: ProfileScope, conversationId: number): Promise<AiConversationRow> {
+    const rows = await this.conn.db
+      .select()
+      .from(aiConversation)
+      .where(profileWhere(scope, aiConversation.userId, eq(aiConversation.id, conversationId)))
+      .limit(1);
+
+    const row = rows[0];
+    if (row === undefined) {
+      throw notFoundError(ErrorCode.CONVERSATION_NOT_FOUND, '对话不存在');
+    }
+    return row;
+  }
+
+  /** 插入一条对话消息并返回视图（`chat()` 的两条消息共用） */
+  private async insertMessage(
+    conversationId: number,
+    values: {
+      seq: number;
+      role: (typeof MESSAGE_ROLES)[number];
+      content: string;
+      inputType?: (typeof MESSAGE_INPUT_TYPES)[number];
+      provider?: (typeof AI_PROVIDERS)[number];
+      tokens?: number;
+      latencyMs?: number;
+    },
+  ): Promise<MessageView> {
+    const result = await this.conn.db
+      .insert(aiMessage)
+      .values({
+        conversationId,
+        seq: values.seq,
+        role: values.role,
+        content: values.content,
+        inputType: values.inputType ?? 'text',
+        provider: values.provider,
+        tokens: values.tokens,
+        latencyMs: values.latencyMs,
+        filtered: false,
+      })
+      .returning();
+
+    const row = result[0];
+    // 🔴 与 sendMessage 同样处理：INSERT ... RETURNING 必然回一行，空数组属不变量破坏
+    if (row === undefined) {
+      throw internalInvariantError('消息写入后未返回任何行');
+    }
+    return this.toMessageView(row);
+  }
+
+  /** 取最近若干条消息作为上下文（seq 升序返回） */
+  private async loadHistory(conversationId: number, limit = 13): Promise<AiMessageRow[]> {
+    const rows = await this.conn.db
+      .select()
+      .from(aiMessage)
+      .where(eq(aiMessage.conversationId, conversationId))
+      .orderBy(desc(aiMessage.seq))
+      .limit(limit);
+    return rows.reverse();
+  }
+
+  /**
+   * 一次真实的 AI 往返：用户消息 + AI 回复。
+   *
+   * 🔴 **永不因为 AI 失败而抛错**（除对话不存在/无归属）：AI 不可用时
+   *    用户消息必须照常落库，返回 `degraded: true` 与明确 reason。
+   *    否则学生会以为「消息没发出去」而重复发送，且看不到「请去管理后台配置 AI」的提示。
+   *
+   * 🔴 每次出网调用写 `audit_log.egress_call`（04 文档 §9.2），成败都记。
+   */
+  async chat(
+    scope: ProfileScope,
+    conversationId: number,
+    input: ChatInput,
+    meta: AuditMeta,
+  ): Promise<ChatView> {
+    const conversation = await this.getOwnedConversation(scope, conversationId);
+
+    // 1) 用户消息先落库 —— AI 调用失败也不能丢输入
+    const [maxRow] = await this.conn.db
+      .select({ max: sql<number>`COALESCE(MAX(${aiMessage.seq}), 0)` })
+      .from(aiMessage)
+      .where(eq(aiMessage.conversationId, conversationId))
+      .limit(1);
+    const userSeq = (maxRow?.max ?? 0) + 1;
+
+    const userMessage = await this.insertMessage(conversationId, {
+      seq: userSeq,
+      role: 'user',
+      content: input.content,
+    });
+
+    // 2) 回合计数（与 sendMessage 的语义一致：每条 user 消息 +1）
+    await this.conn.db
+      .update(aiConversation)
+      .set({ turnCount: sql`${aiConversation.turnCount} + 1` })
+      .where(eq(aiConversation.id, conversationId));
+
+    // 3) 组上下文并调用 LLM（只送 user/assistant 两条角色，system 由 llm.service 拼）
+    const history = (await this.loadHistory(conversationId)).filter(isChatRole);
+    const messages = buildChatMessages(
+      { persona: conversation.persona, level: conversation.level },
+      history.map((message) => ({ role: message.role, content: message.content })),
+    );
+
+    try {
+      const result = await this.llm.chat(messages);
+
+      const assistantMessage = await this.insertMessage(conversationId, {
+        seq: userSeq + 1,
+        role: 'assistant',
+        content: result.content,
+        provider: 'cloud',
+        tokens: result.totalTokens,
+        latencyMs: result.latencyMs,
+      });
+
+      await this.conn.db
+        .update(aiConversation)
+        .set({
+          providerUsed: 'cloud',
+          fallbackUsed: false,
+          totalTokens: sql`${aiConversation.totalTokens} + ${result.totalTokens}`,
+        })
+        .where(eq(aiConversation.id, conversationId));
+
+      await this.audit.record({
+        action: 'egress_call',
+        targetType: 'ai_conversation',
+        targetId: String(conversationId),
+        actorId: meta.actorId,
+        ip: meta.ip,
+        ua: meta.ua,
+        detail: {
+          provider: 'cloud',
+          model: result.model,
+          ok: true,
+          tokens: result.totalTokens,
+          latencyMs: result.latencyMs,
+        },
+      });
+
+      return { userMessage, assistantMessage, degraded: false };
+    } catch (err) {
+      const business =
+        err instanceof BusinessError
+          ? err
+          : new BusinessError(ErrorCode.LLM_UNAVAILABLE, 'AI 服务暂时不可用，请稍后重试', 503);
+
+      // 标记降级：provider_used='rule' + fallback_used=true，
+      // 报告/统计能据此知道「这段对话没有真正用到云 API」
+      await this.conn.db
+        .update(aiConversation)
+        .set({ providerUsed: 'rule', fallbackUsed: true })
+        .where(eq(aiConversation.id, conversationId));
+
+      await this.audit.record({
+        action: 'egress_call',
+        targetType: 'ai_conversation',
+        targetId: String(conversationId),
+        actorId: meta.actorId,
+        ip: meta.ip,
+        ua: meta.ua,
+        detail: { provider: 'cloud', ok: false, code: business.code, latencyMs: null },
+      });
+
+      return { userMessage, assistantMessage: null, degraded: true, reason: business.message, code: business.code };
     }
   }
 

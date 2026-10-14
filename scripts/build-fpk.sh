@@ -78,6 +78,13 @@ gen_secret() {
 }
 JWT_ACCESS_SECRET="$(gen_secret)"
 JWT_REFRESH_SECRET="$(gen_secret)"
+# `app_secret` 表的 AES-256-GCM 主密钥：base64 编码的 32 字节。
+# ⚠️ 与 JWT 密钥不同，这个值**必须跨重建持久化**：一旦写入 API Key，
+# 丢失主密钥会让存量密钥永久无法解密（`reveal()` 静默返回 null）。
+# 见 app-secret.store.ts 的 `keyOf()` 与轮换说明。
+# 首次打包随机生成；**给旧库打升级包时必须用 `APP_SECRET_MASTER_KEY=原值` 跑**，
+# 否则会换一个全新密钥，用户已保存的 API Key 立即失效（表现为「AI 配置一直在但连不上」）。
+APP_SECRET_MASTER_KEY="${APP_SECRET_MASTER_KEY:-$(openssl rand -base64 32)}"
 cat > "$STAGE/app/docker/docker-compose.yaml" <<'YAML'
 version: "3.8"
 services:
@@ -100,6 +107,7 @@ services:
       - DATABASE_URL=postgresql://forge:forge_password@postgres:5432/englishforge
       - JWT_ACCESS_SECRET=__JWT_ACCESS_SECRET__
       - JWT_REFRESH_SECRET=__JWT_REFRESH_SECRET__
+      - APP_SECRET_MASTER_KEY=__APP_SECRET_MASTER_KEY__
       - JWT_ISSUER=english-forge
       - CORS_ORIGINS=*
       - MEDIA_ROOT=/data/media
@@ -149,8 +157,8 @@ networks:
     driver: bridge
 YAML
 
-# 3a) 注入随机 JWT 密钥（仅 hex 字符，sed 安全）
-sed -i "s#__JWT_ACCESS_SECRET__#${JWT_ACCESS_SECRET}#g; s#__JWT_REFRESH_SECRET__#${JWT_REFRESH_SECRET}#g" "$STAGE/app/docker/docker-compose.yaml"
+# 3a) 注入随机密钥（hex / base64 均不含 `#`，sed 安全）
+sed -i "s#__JWT_ACCESS_SECRET__#${JWT_ACCESS_SECRET}#g; s#__JWT_REFRESH_SECRET__#${JWT_REFRESH_SECRET}#g; s#__APP_SECRET_MASTER_KEY__#${APP_SECRET_MASTER_KEY}#g" "$STAGE/app/docker/docker-compose.yaml"
 
 # 3b) 桌面入口（app/ui/config + 图标）
 #     fnOS 桌面图标 / 应用中心「打开」按钮由 app/ui/config 声明：
